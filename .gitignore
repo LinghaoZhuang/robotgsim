@@ -1,2 +1,5 @@
 RobotSim/assets
 RobotSim/exports
+SplatSim/to_delete
+SplatSim/data/pcds_path
+*.ply
