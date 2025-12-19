@@ -22,10 +22,11 @@ from scipy.spatial.transform import Rotation as R
 
 class DataCollector:
     def __init__(self, task=0, data_augmentation=True, use_gs=False,save_dir='collected_data',
-                 case=0, reset_cam=0.01,single_view=False):
+                 case=0, reset_cam=0.01,single_view=False, use_robot_gs=False):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.data_augmentation = data_augmentation
         self.use_gs = use_gs
+        self.use_robot_gs = use_robot_gs  # Pure GS rendering mode
         self.root_dir = save_dir
         self.case = case
         self.step = 0
@@ -46,25 +47,33 @@ class DataCollector:
         if self.use_gs:
             if self.single_view:
                 self.render = Renderer()
-                self.render.update_gaussian_data('exports/scene/splat-transform-wo-robot.ply')
-                self.origin_gaussians = self.render.gaussians
-                self.original_sh = self.origin_gaussians.sh.clone()
+                if not self.use_robot_gs:
+                    self.render.update_gaussian_data('exports/scene/splat-transform-wo-robot.ply')
+                    self.origin_gaussians = self.render.gaussians
+                    self.original_sh = self.origin_gaussians.sh.clone()
                 self.init_pose()
             else:
                 self.render_left = Renderer()
-                self.render_left.update_gaussian_data('exports/mult-view-scene/left-transform2.ply')
-                # self.render_left.update_gaussian_data('exports/splat/left.ply')
-                self.origin_gaussians_left = self.render_left.gaussians
-                self.original_sh_left = self.origin_gaussians_left.sh.clone()
-  
                 self.render_right = Renderer()
-                self.render_right.update_gaussian_data('exports/mult-view-scene/right-transform.ply')
-                self.origin_gaussians_right = self.render_right.gaussians
-                self.original_sh_right = self.origin_gaussians_right.sh.clone()
+
+                if not self.use_robot_gs:
+                    # Original overlay mode
+                    self.render_left.update_gaussian_data('exports/mult-view-scene/left-transform2.ply')
+                    self.origin_gaussians_left = self.render_left.gaussians
+                    self.original_sh_left = self.origin_gaussians_left.sh.clone()
+
+                    self.render_right.update_gaussian_data('exports/mult-view-scene/right-transform.ply')
+                    self.origin_gaussians_right = self.render_right.gaussians
+                    self.original_sh_right = self.origin_gaussians_right.sh.clone()
+
                 self.init_mult_view_pose()
+
+                # Initialize robot GS if pure GS mode
+                if self.use_robot_gs:
+                    self._init_robot_gs()
         else:
             self.background_path = "GT.jpg"
-            self.bg = cv2.imread(self.background_path)        
+            self.bg = cv2.imread(self.background_path)
 
         if self.single_view:
             rgb, _, _, _ = self.cam.render(depth=True, rgb=True)
@@ -407,6 +416,40 @@ class DataCollector:
         # self.raster_settings['projmatrix'] = projmatrix
         # self.raster_settings['campos'] = viewmatrix.inverse()[3, :3]
 
+    def _init_robot_gs(self):
+        """Initialize pure GS rendering robot model."""
+        from robot_gaussian.robot_gaussian_model import RobotGaussianConfig
+
+        # Compute world_to_splat using base_task.py's transform_matrix3
+        supersplat_transform = transform_matrix3(
+            translation=[0.34, 0.09, 0.42],
+            rotation=[-34.29, 11.67, -180-47.35],
+            scale=0.81
+        )
+        world_to_splat = np.linalg.inv(supersplat_transform)
+
+        config = RobotGaussianConfig(
+            robot_ply_path='exports/mult-view-scene/robot.ply',
+            labels_path='data/labels/so100_labels.npy',
+            initial_joint_states=[0, -3.32, 3.11, 1.18, 0, -0.174],
+            world_to_splat=world_to_splat
+        )
+
+        # Initialize robot to reference pose and record link states
+        self.arm.set_dofs_position(config.initial_joint_states)
+        self.scene.step()
+
+        # Setup for both renderers
+        self.render_left.setup_robot(config, self.arm)
+        self.render_left.load_background('exports/mult-view-scene/left-transform2.ply')
+
+        self.render_right.setup_robot(config, self.arm)
+        self.render_right.load_background('exports/mult-view-scene/right-transform.ply')
+
+        # Save original SH for data augmentation
+        self.original_sh_left_bg = self.render_left.bg_gaussians.sh.clone()
+        self.original_sh_right_bg = self.render_right.bg_gaussians.sh.clone()
+
     def random_gaussians(self,scale_range_min=0.95, scale_range_max=1.05, offset_range_min=-0.005, offset_range_max=0.005,noise_std=0.001):
         if self.single_view:
             original_sh = self.original_sh
@@ -420,36 +463,67 @@ class DataCollector:
                 scale.view(1, 3) * rgb + offset.view(1, 3) + noise,
                 0.0, 1.0
             )
-            
+
             self.render.gaussians.sh = RGB2SH(perturbed_rgb)
         else:
-            original_sh_left = self.original_sh_left
-            rgb_left = SH2RGB(original_sh_left)
+            if self.use_robot_gs:
+                # Pure GS mode: only augment background, robot is controlled by FK
+                original_sh_left = self.original_sh_left_bg
+                rgb_left = SH2RGB(original_sh_left)
 
-            scale = torch.rand(3, device=original_sh_left.device) * (scale_range_max - scale_range_min) + scale_range_min
-            offset = torch.rand(3, device=original_sh_left.device) * (offset_range_max - offset_range_min) + offset_range_min
-            noise = torch.randn_like(rgb_left) * noise_std
+                scale = torch.rand(3, device=original_sh_left.device) * (scale_range_max - scale_range_min) + scale_range_min
+                offset = torch.rand(3, device=original_sh_left.device) * (offset_range_max - offset_range_min) + offset_range_min
+                noise = torch.randn_like(rgb_left) * noise_std
 
-            perturbed_rgb_left = torch.clamp(
-                scale.view(1, 3) * rgb_left + offset.view(1, 3) + noise,
-                0.0, 1.0
-            )
+                perturbed_rgb_left = torch.clamp(
+                    scale.view(1, 3) * rgb_left + offset.view(1, 3) + noise,
+                    0.0, 1.0
+                )
 
-            self.render_left.gaussians.sh = RGB2SH(perturbed_rgb_left)
+                self.render_left.bg_gaussians.sh = RGB2SH(perturbed_rgb_left)
 
-            original_sh_right = self.original_sh_right
-            rgb_right = SH2RGB(original_sh_right)
+                original_sh_right = self.original_sh_right_bg
+                rgb_right = SH2RGB(original_sh_right)
 
-            scale = torch.rand(3, device=original_sh_right.device) * (scale_range_max - scale_range_min) + scale_range_min
-            offset = torch.rand(3, device=original_sh_right.device) * (offset_range_max - offset_range_min) + offset_range_min
-            noise = torch.randn_like(rgb_right) * noise_std
+                scale = torch.rand(3, device=original_sh_right.device) * (scale_range_max - scale_range_min) + scale_range_min
+                offset = torch.rand(3, device=original_sh_right.device) * (offset_range_max - offset_range_min) + offset_range_min
+                noise = torch.randn_like(rgb_right) * noise_std
 
-            perturbed_rgb_right = torch.clamp(
-                scale.view(1, 3) * rgb_right + offset.view(1, 3) + noise,
-                0.0, 1.0
-            )
+                perturbed_rgb_right = torch.clamp(
+                    scale.view(1, 3) * rgb_right + offset.view(1, 3) + noise,
+                    0.0, 1.0
+                )
 
-            self.render_right.gaussians.sh = RGB2SH(perturbed_rgb_right)
+                self.render_right.bg_gaussians.sh = RGB2SH(perturbed_rgb_right)
+            else:
+                # Original overlay mode
+                original_sh_left = self.original_sh_left
+                rgb_left = SH2RGB(original_sh_left)
+
+                scale = torch.rand(3, device=original_sh_left.device) * (scale_range_max - scale_range_min) + scale_range_min
+                offset = torch.rand(3, device=original_sh_left.device) * (offset_range_max - offset_range_min) + offset_range_min
+                noise = torch.randn_like(rgb_left) * noise_std
+
+                perturbed_rgb_left = torch.clamp(
+                    scale.view(1, 3) * rgb_left + offset.view(1, 3) + noise,
+                    0.0, 1.0
+                )
+
+                self.render_left.gaussians.sh = RGB2SH(perturbed_rgb_left)
+
+                original_sh_right = self.original_sh_right
+                rgb_right = SH2RGB(original_sh_right)
+
+                scale = torch.rand(3, device=original_sh_right.device) * (scale_range_max - scale_range_min) + scale_range_min
+                offset = torch.rand(3, device=original_sh_right.device) * (offset_range_max - offset_range_min) + offset_range_min
+                noise = torch.randn_like(rgb_right) * noise_std
+
+                perturbed_rgb_right = torch.clamp(
+                    scale.view(1, 3) * rgb_right + offset.view(1, 3) + noise,
+                    0.0, 1.0
+                )
+
+                self.render_right.gaussians.sh = RGB2SH(perturbed_rgb_right)
 
     def get_bg(self):
         if self.single_view:
@@ -550,7 +624,78 @@ class DataCollector:
                 self.random()
             return image_array_left, image_array_right
 
+    def get_obs_pure_gs(self, bg_color=np.array([32, 32, 186]), actions=None):
+        """Pure 3DGS rendering (replaces overlay approach)."""
+        # Critical: Update camera parameters every frame (reusing get_bg logic)
+        genesis_c2w_left = torch.tensor(self.cam_left.transform, device='cuda:0', dtype=torch.float32)
+        genesis_c2w_left = gl_to_cv(genesis_c2w_left)
+        cam_pos_left = genesis_c2w_left[:3, 3]
+        viewmatrix_left = torch.linalg.inv(genesis_c2w_left).T
+
+        self.raster_settings_left['viewmatrix'] = viewmatrix_left.detach()
+        self.raster_settings_left['campos'] = cam_pos_left.detach()
+        self.raster_settings_left['projmatrix'] = viewmatrix_left @ self.raster_settings_left['projmatrix_raw']
+
+        genesis_c2w_right = torch.tensor(self.cam_right.transform, device='cuda:0', dtype=torch.float32)
+        genesis_c2w_right = gl_to_cv(genesis_c2w_right)
+        cam_pos_right = genesis_c2w_right[:3, 3]
+        viewmatrix_right = torch.linalg.inv(genesis_c2w_right).T
+
+        self.raster_settings_right['viewmatrix'] = viewmatrix_right.detach()
+        self.raster_settings_right['campos'] = cam_pos_right.detach()
+        self.raster_settings_right['projmatrix'] = viewmatrix_right @ self.raster_settings_right['projmatrix_raw']
+
+        # Update robot Gaussian positions
+        self.render_left.update_robot(self.arm)
+        self.render_right.update_robot(self.arm)
+
+        # Render dual views
+        img_left = self.render_left.draw_pure_gs(self.raster_settings_left)
+        img_right = self.render_right.draw_pure_gs(self.raster_settings_right)
+
+        # Convert format and save images
+        if img_left.is_cuda:
+            img_left = img_left.cpu()
+        if img_right.is_cuda:
+            img_right = img_right.cpu()
+
+        img_left_np = (img_left.permute(1, 2, 0).numpy() * 255).clip(0, 255).astype(np.uint8)
+        img_right_np = (img_right.permute(1, 2, 0).numpy() * 255).clip(0, 255).astype(np.uint8)
+
+        cv2.imwrite(str(self.save_dir / f'frame_{self.step}_left.png'), cv2.cvtColor(img_left_np, cv2.COLOR_RGB2BGR))
+        cv2.imwrite(str(self.save_dir / f'frame_{self.step}_right.png'), cv2.cvtColor(img_right_np, cv2.COLOR_RGB2BGR))
+
+        # Save qpos and actions (same as original get_obs_img)
+        qpos = self.arm.get_dofs_position().cpu().numpy()
+
+        if actions is None:
+            actions = qpos.copy()
+        else:
+            actions = np.asarray(actions)
+
+        if actions.shape == (5,):
+            grip_cur = qpos[5]
+            actions = np.append(actions, grip_cur)
+
+        assert actions.shape == (6,), "Actions must be a 6D vector (5 joints + gripper)"
+        assert qpos.shape == (6,), "Qpos must be 6D (5 joints + gripper)"
+
+        def turn_into_real_actions(actions):
+            actions = actions * 180.0 / np.pi
+            actions[0] = -actions[0]
+            actions[1] = -actions[1]
+            actions[4] = -actions[4]
+            return actions
+
+        self.actions.append(turn_into_real_actions(actions))
+        self.qpos.append(turn_into_real_actions(qpos))
+
     def get_obs_img(self, tol=10, feather_size=1, bg_color=np.array([32, 32, 186]), actions=None):
+        # Pure GS rendering branch
+        if self.use_robot_gs:
+            return self.get_obs_pure_gs(bg_color=bg_color, actions=actions)
+
+        # Original overlay rendering logic
         # self.cam.set_pose(pos=self.cam.pos + (0,0.01,0)) 
         # self.angle += self.speed
         

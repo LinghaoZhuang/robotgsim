@@ -201,11 +201,81 @@ class CUDARenderer(GaussianRenderBase):
 class Renderer(GaussianRenderBase):
     def __init__(self):
         super().__init__()
-        # self.update_gaussian_data()
+        self.robot_model = None
+        self.bg_gaussians = None  # Background Gaussians
 
     def update_gaussian_data(self,file_path='/home/haoyu/code/GSim/exports/scene/scene-transform-wo-camera.ply'):
         gaussians = util_gau.load_ply(file_path)
         self.gaussians = gaus_cuda_from_cpu(gaussians)
+
+    def setup_robot(self, config, arm):
+        """
+        Initialize robot Gaussian model.
+
+        Args:
+            config: RobotGaussianConfig
+            arm: Genesis arm entity
+        """
+        from robot_gaussian.robot_gaussian_model import RobotGaussianModel
+        self.robot_model = RobotGaussianModel(config, arm)
+
+    def load_background(self, bg_path):
+        """
+        Load background Gaussians.
+
+        Args:
+            bg_path: Path to background PLY file
+        """
+        gaussians = util_gau.load_ply(bg_path)
+        self.bg_gaussians = gaus_cuda_from_cpu(gaussians)
+
+    def update_robot(self, arm):
+        """
+        Update robot Gaussian positions.
+
+        Args:
+            arm: Genesis arm entity
+        """
+        if self.robot_model:
+            self.robot_model.update(arm)
+
+    def draw_pure_gs(self, raster_settings):
+        """
+        Pure Gaussian Splatting rendering (robot + background).
+        Bypasses theta/rho parameters, renders combined scene directly.
+
+        Args:
+            raster_settings: Dict of rasterization settings
+
+        Returns:
+            Rendered image tensor (3, H, W)
+        """
+        robot_gau = self.robot_model.get_gaussians()
+        bg_gau = self.bg_gaussians
+
+        # Merge Gaussians
+        combined_xyz = torch.cat([robot_gau.xyz, bg_gau.xyz], dim=0)
+        combined_rot = torch.cat([robot_gau.rot, bg_gau.rot], dim=0)
+        combined_scale = torch.cat([robot_gau.scale, bg_gau.scale], dim=0)
+        combined_opacity = torch.cat([robot_gau.opacity, bg_gau.opacity], dim=0)
+        combined_sh = torch.cat([robot_gau.sh, bg_gau.sh], dim=0)
+
+        # Render (without theta/rho)
+        raster_obj = GaussianRasterizationSettings(**raster_settings)
+        rasterizer = GaussianRasterizer(raster_settings=raster_obj)
+
+        screenspace_points = torch.zeros_like(combined_xyz, requires_grad=False)
+        img, _, _, _, _ = rasterizer(
+            means3D=combined_xyz,
+            means2D=screenspace_points,
+            shs=combined_sh,
+            colors_precomp=None,
+            opacities=combined_opacity,
+            scales=combined_scale,
+            rotations=combined_rot,
+            cov3D_precomp=None
+        )
+        return img  # (3, H, W)
 
     def draw(self, raster_settings, theta, rho):
         raster_settings = GaussianRasterizationSettings(**raster_settings)

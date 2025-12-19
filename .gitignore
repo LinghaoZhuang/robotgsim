@@ -3,3 +3,5 @@ RobotSim/exports
 SplatSim/to_delete
 SplatSim/data/pcds_path
 *.ply
+AGENTS.md
+CLAUDE.md
