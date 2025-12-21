@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Pose Adjuster - 3D Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            height: 100vh;
+        }
+
+        .controls-panel {
+            background: #16213e;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #0f3460;
+        }
+
+        .viewer-panel {
+            position: relative;
+            background: #0f1419;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        .header {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 1.5em;
+            color: #00d9ff;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 0.9em;
+            color: #8b92a8;
+        }
+
+        .file-upload {
+            margin: 20px 0;
+            padding: 20px;
+            background: #0f3460;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .upload-btn {
+            padding: 10px 20px;
+            background: #00d9ff;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .upload-btn:hover {
+            background: #00b8d4;
+        }
+
+        .upload-status {
+            margin-top: 10px;
+            font-size: 0.85em;
+            color: #4ecca3;
+        }
+
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin: 15px 0;
+        }
+
+        .preset-btn {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.85em;
+            font-weight: 600;
+            cursor: pointer;
+            background: #0f3460;
+            color: #fff;
+            transition: all 0.3s;
+        }
+
+        .preset-btn:hover {
+            background: #1a4d7a;
+            transform: translateY(-2px);
+        }
+
+        .joint-control {
+            margin: 15px 0;
+            padding: 15px;
+            background: #0f3460;
+            border-radius: 8px;
+        }
+
+        .joint-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .joint-name {
+            font-weight: bold;
+            font-size: 0.9em;
+            color: #00d9ff;
+        }
+
+        .joint-value {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #4ecca3;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #1a4d7a;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #00d9ff;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 217, 255, 0.5);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #00d9ff;
+            cursor: pointer;
+            border: none;
+        }
+
+        .output-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #0f3460;
+            border-radius: 8px;
+        }
+
+        .output-section h3 {
+            font-size: 1em;
+            color: #00d9ff;
+            margin-bottom: 10px;
+        }
+
+        .code-output {
+            background: #1a1a2e;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8em;
+            max-height: 150px;
+            overflow-y: auto;
+            color: #4ecca3;
+        }
+
+        .copy-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #00d9ff;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+        }
+
+        .copy-btn:hover {
+            background: #00b8d4;
+        }
+
+        .viewer-info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(15, 52, 96, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            max-width: 250px;
+            backdrop-filter: blur(10px);
+        }
+
+        .viewer-info h4 {
+            color: #00d9ff;
+            margin-bottom: 8px;
+        }
+
+        .viewer-info ul {
+            list-style: none;
+            line-height: 1.6;
+        }
+
+        .viewer-info li::before {
+            content: "• ";
+            color: #4ecca3;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(15, 52, 96, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            backdrop-filter: blur(10px);
+        }
+
+        .legend h4 {
+            color: #00d9ff;
+            margin-bottom: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            margin-right: 8px;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #00d9ff;
+            font-size: 1.2em;
+        }
+
+        .loading-spinner {
+            border: 3px solid #0f3460;
+            border-top: 3px solid #00d9ff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Controls Panel -->
+        <div class="controls-panel">
+            <div class="header">
+                <h1>🤖 Robot Pose Adjuster</h1>
+                <p>3D 实时可视化</p>
+            </div>
+
+            <div class="file-upload">
+                <p style="margin-bottom: 10px; color: #8b92a8;">上传 robot.ply 文件</p>
+                <input type="file" id="plyUpload" accept=".ply" style="display: none;">
+                <button class="upload-btn" onclick="document.getElementById('plyUpload').click()">
+                    选择文件
+                </button>
+                <div class="upload-status" id="uploadStatus"></div>
+            </div>
+
+            <div class="preset-buttons">
+                <button class="preset-btn" onclick="setPreset('zero')">零位</button>
+                <button class="preset-btn" onclick="setPreset('current')">当前</button>
+                <button class="preset-btn" onclick="setPreset('home')">Home</button>
+                <button class="preset-btn" onclick="setPreset('elbow')">肘抬起</button>
+            </div>
+
+            <div id="jointControls"></div>
+
+            <div class="output-section">
+                <h3>📋 Python 代码</h3>
+                <div class="code-output" id="codeOutput"></div>
+                <button class="copy-btn" onclick="copyCode()">复制代码</button>
+            </div>
+        </div>
+
+        <!-- 3D Viewer Panel -->
+        <div class="viewer-panel">
+            <div id="canvas-container"></div>
+
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                <div>初始化 3D 视图...</div>
+            </div>
+
+            <div class="viewer-info">
+                <h4>🎮 控制说明</h4>
+                <ul>
+                    <li>左键拖动: 旋转视图</li>
+                    <li>右键拖动: 平移视图</li>
+                    <li>滚轮: 缩放</li>
+                    <li>R键: 重置视角</li>
+                </ul>
+            </div>
+
+            <div class="legend">
+                <h4>🎨 图例</h4>
+                <div class="legend-item">
+                    <div class="color-box" style="background: #ff6b6b;"></div>
+                    <span>Base</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box" style="background: #4ecdc4;"></div>
+                    <span>Shoulder</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box" style="background: #45b7d1;"></div>
+                    <span>Upper Arm</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box" style="background: #96ceb4;"></div>
+                    <span>Forearm</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box" style="background: #ffeaa7;"></div>
+                    <span>Wrist</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box" style="background: #dfe6e9;"></div>
+                    <span>robot.ply</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/PLYLoader.js"></script>
+
+    <script>
+        // Joint configuration
+        const joints = [
+            { name: 'J0 (Rotation)', id: 'j0', min: -Math.PI, max: Math.PI, default: 0 },
+            { name: 'J1 (Pitch)', id: 'j1', min: -Math.PI, max: Math.PI, default: -3.32 },
+            { name: 'J2 (Elbow)', id: 'j2', min: -Math.PI, max: Math.PI, default: 3.11 },
+            { name: 'J3 (Wrist P)', id: 'j3', min: -Math.PI, max: Math.PI, default: 1.18 },
+            { name: 'J4 (Wrist R)', id: 'j4', min: -Math.PI, max: Math.PI, default: 0 },
+            { name: 'J5 (Gripper)', id: 'j5', min: -Math.PI, max: Math.PI, default: -0.174 }
+        ];
+
+        const presets = {
+            zero: [0, 0, 0, 0, 0, 0],
+            current: [0, -3.32, 3.11, 1.18, 0, -0.174],
+            home: [0, -0.785, 0.785, 0, 0, 0],
+            elbow: [0, 0, 1.57, 0, 0, 0]
+        };
+
+        // Three.js scene
+        let scene, camera, renderer, controls;
+        let robotLinks = [];
+        let plyPointCloud = null;
+
+        // Initialize Three.js
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f1419);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                60,
+                container.clientWidth / container.clientHeight,
+                0.01,
+                100
+            );
+            camera.position.set(0.5, 0.5, 0.5);
+            camera.lookAt(0, 0, 0.2);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+
+            // Grid
+            const gridHelper = new THREE.GridHelper(1, 10, 0x00d9ff, 0x0f3460);
+            scene.add(gridHelper);
+
+            // Axes
+            const axesHelper = new THREE.AxesHelper(0.2);
+            scene.add(axesHelper);
+
+            // Create robot
+            createRobot();
+
+            // Handle resize
+            window.addEventListener('resize', onWindowResize);
+
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+
+            // Animation loop
+            animate();
+        }
+
+        function createRobot() {
+            // Simplified robot visualization using cylinders and spheres
+            const linkColors = [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0x96ceb4, 0xffeaa7, 0xdfe6e9];
+
+            // Base
+            const baseGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.05, 16);
+            const baseMaterial = new THREE.MeshStandardMaterial({ color: linkColors[0] });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            base.position.y = 0.025;
+            scene.add(base);
+            robotLinks.push({ mesh: base, type: 'base' });
+
+            // Link 1
+            const link1Geometry = new THREE.CylinderGeometry(0.03, 0.03, 0.1, 16);
+            const link1Material = new THREE.MeshStandardMaterial({ color: linkColors[1] });
+            const link1 = new THREE.Mesh(link1Geometry, link1Material);
+            link1.position.set(0, 0.1, 0);
+            scene.add(link1);
+            robotLinks.push({ mesh: link1, type: 'link1', parent: base });
+
+            // More links would be added here with proper FK
+            // This is a simplified visualization
+        }
+
+        function updateRobotPose() {
+            const values = joints.map(j => parseFloat(document.getElementById(j.id).value));
+
+            // Simplified FK visualization
+            // In a full implementation, this would calculate proper forward kinematics
+            if (robotLinks.length > 1) {
+                robotLinks[1].mesh.rotation.y = values[0];
+                robotLinks[1].mesh.rotation.x = values[1];
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // PLY file upload
+        document.getElementById('plyUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            document.getElementById('uploadStatus').textContent = '加载中...';
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const loader = new THREE.PLYLoader();
+                const geometry = loader.parse(event.target.result);
+
+                // Remove old point cloud
+                if (plyPointCloud) {
+                    scene.remove(plyPointCloud);
+                }
+
+                // Create point cloud
+                const material = new THREE.PointsMaterial({
+                    color: 0xdfe6e9,
+                    size: 0.002,
+                    transparent: true,
+                    opacity: 0.6
+                });
+
+                plyPointCloud = new THREE.Points(geometry, material);
+                scene.add(plyPointCloud);
+
+                document.getElementById('uploadStatus').textContent =
+                    `✓ 已加载 ${geometry.attributes.position.count} 个点`;
+                document.getElementById('uploadStatus').style.color = '#4ecca3';
+            };
+
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Create joint controls
+        function createJointControls() {
+            const container = document.getElementById('jointControls');
+
+            joints.forEach((joint, index) => {
+                const control = document.createElement('div');
+                control.className = 'joint-control';
+                control.innerHTML = `
+                    <div class="joint-header">
+                        <div class="joint-name">${joint.name}</div>
+                        <div class="joint-value" id="${joint.id}-value">0.000</div>
+                    </div>
+                    <input type="range"
+                           id="${joint.id}"
+                           min="${joint.min}"
+                           max="${joint.max}"
+                           step="0.01"
+                           value="${joint.default}"
+                           oninput="updateJoint('${joint.id}')">
+                `;
+                container.appendChild(control);
+            });
+
+            joints.forEach(joint => updateJoint(joint.id));
+        }
+
+        function updateJoint(jointId) {
+            const value = parseFloat(document.getElementById(jointId).value);
+            document.getElementById(`${jointId}-value`).textContent =
+                `${value.toFixed(3)} (${(value * 180 / Math.PI).toFixed(1)}°)`;
+
+            updateRobotPose();
+            updateOutput();
+        }
+
+        function updateOutput() {
+            const values = joints.map(j => parseFloat(document.getElementById(j.id).value));
+            const code = `INITIAL_JOINTS = [${values.map(v => v.toFixed(3)).join(', ')}]`;
+            document.getElementById('codeOutput').textContent = code;
+        }
+
+        function setPreset(presetName) {
+            const values = presets[presetName];
+            joints.forEach((joint, index) => {
+                document.getElementById(joint.id).value = values[index];
+                updateJoint(joint.id);
+            });
+        }
+
+        function copyCode() {
+            const code = document.getElementById('codeOutput').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                const btn = event.target;
+                btn.textContent = '已复制!';
+                btn.style.background = '#4ecca3';
+                setTimeout(() => {
+                    btn.textContent = '复制代码';
+                    btn.style.background = '#00d9ff';
+                }, 2000);
+            });
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'r' || e.key === 'R') {
+                camera.position.set(0.5, 0.5, 0.5);
+                camera.lookAt(0, 0, 0.2);
+                controls.reset();
+            }
+        });
+
+        // Initialize
+        window.onload = function() {
+            createJointControls();
+            initThree();
+        };
+    </script>
+</body>
+</html>
