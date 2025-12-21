@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Joint Pose Adjuster</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .joint-control {
+            margin-bottom: 25px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+
+        .joint-control:hover {
+            background: #e9ecef;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .joint-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .joint-name {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #495057;
+        }
+
+        .joint-value {
+            display: flex;
+            gap: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95em;
+        }
+
+        .value-rad {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .value-deg {
+            color: #764ba2;
+        }
+
+        .slider-container {
+            position: relative;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #dee2e6;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            border: none;
+        }
+
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 30px 0;
+        }
+
+        .preset-btn {
+            padding: 15px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: white;
+        }
+
+        .preset-btn:nth-child(1) { background: #667eea; }
+        .preset-btn:nth-child(2) { background: #f093fb; }
+        .preset-btn:nth-child(3) { background: #4facfe; }
+        .preset-btn:nth-child(4) { background: #43e97b; }
+        .preset-btn:nth-child(5) { background: #fa709a; }
+
+        .preset-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .output-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #212529;
+            border-radius: 10px;
+            color: #f8f9fa;
+        }
+
+        .output-section h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .code-block {
+            background: #1a1d20;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95em;
+            position: relative;
+            margin-bottom: 15px;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.3s;
+        }
+
+        .copy-btn:hover {
+            background: #764ba2;
+        }
+
+        .copy-btn.copied {
+            background: #43e97b;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            padding: 20px;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 5px;
+        }
+
+        .instructions h4 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .instructions ol {
+            margin-left: 20px;
+            color: #856404;
+        }
+
+        .instructions li {
+            margin: 8px 0;
+        }
+
+        .visual-feedback {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .joint-visual {
+            text-align: center;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .joint-visual-name {
+            font-size: 0.8em;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+
+        .joint-visual-bar {
+            height: 100px;
+            background: #e9ecef;
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .joint-visual-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: height 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Robot Joint Pose Adjuster</h1>
+            <p>SO-100 机械臂关节姿态调试工具</p>
+        </div>
+
+        <div class="content">
+            <!-- Preset Buttons -->
+            <div class="preset-buttons">
+                <button class="preset-btn" onclick="setPreset('zero')">零位姿态</button>
+                <button class="preset-btn" onclick="setPreset('current')">当前姿态</button>
+                <button class="preset-btn" onclick="setPreset('home')">Home姿态</button>
+                <button class="preset-btn" onclick="setPreset('elbow_up')">肘部抬起</button>
+                <button class="preset-btn" onclick="setPreset('custom')">自定义</button>
+            </div>
+
+            <!-- Visual Feedback -->
+            <div class="visual-feedback" id="visualFeedback"></div>
+
+            <!-- Joint Controls -->
+            <div id="jointControls"></div>
+
+            <!-- Output Section -->
+            <div class="output-section">
+                <h3>📋 生成的代码</h3>
+
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyToClipboard('pythonCode')">复制</button>
+                    <div id="pythonCode"></div>
+                </div>
+
+                <div class="instructions">
+                    <h4>💡 使用说明</h4>
+                    <ol>
+                        <li>使用滑块调整各关节角度</li>
+                        <li>观察上方的可视化反馈条</li>
+                        <li>点击"复制"按钮复制Python代码</li>
+                        <li>在终端运行: <code>python scripts/find_robot_pose.py</code></li>
+                        <li>当提示输入时，粘贴上面的角度值</li>
+                        <li>检查3D可视化中URDF mesh和robot.ply是否对齐</li>
+                        <li>如果对齐良好，更新 <code>segment_robot.py</code> 中的初始姿态</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Joint configuration
+        const joints = [
+            { name: 'Joint 0 (Rotation)', id: 'j0', min: -3.14, max: 3.14, default: 0 },
+            { name: 'Joint 1 (Pitch)', id: 'j1', min: -3.14, max: 3.14, default: -3.32 },
+            { name: 'Joint 2 (Elbow)', id: 'j2', min: -3.14, max: 3.14, default: 3.11 },
+            { name: 'Joint 3 (Wrist Pitch)', id: 'j3', min: -3.14, max: 3.14, default: 1.18 },
+            { name: 'Joint 4 (Wrist Roll)', id: 'j4', min: -3.14, max: 3.14, default: 0 },
+            { name: 'Joint 5 (Gripper)', id: 'j5', min: -3.14, max: 3.14, default: -0.174 }
+        ];
+
+        // Preset poses
+        const presets = {
+            zero: [0, 0, 0, 0, 0, 0],
+            current: [0, -3.32, 3.11, 1.18, 0, -0.174],
+            home: [0, -0.785, 0.785, 0, 0, 0],
+            elbow_up: [0, 0, 1.57, 0, 0, 0],
+            custom: [0, -1.57, 1.57, 1.57, -1.57, 0]
+        };
+
+        // Initialize
+        function init() {
+            createJointControls();
+            createVisualFeedback();
+            updateOutput();
+        }
+
+        function createJointControls() {
+            const container = document.getElementById('jointControls');
+
+            joints.forEach((joint, index) => {
+                const control = document.createElement('div');
+                control.className = 'joint-control';
+                control.innerHTML = `
+                    <div class="joint-header">
+                        <div class="joint-name">${joint.name}</div>
+                        <div class="joint-value">
+                            <span class="value-rad" id="${joint.id}-rad">0.000 rad</span>
+                            <span class="value-deg" id="${joint.id}-deg">(0.0°)</span>
+                        </div>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range"
+                               id="${joint.id}"
+                               min="${joint.min}"
+                               max="${joint.max}"
+                               step="0.01"
+                               value="${joint.default}"
+                               oninput="updateJoint('${joint.id}', ${index})">
+                    </div>
+                `;
+                container.appendChild(control);
+            });
+
+            // Initialize values
+            joints.forEach((joint, index) => {
+                updateJoint(joint.id, index);
+            });
+        }
+
+        function createVisualFeedback() {
+            const container = document.getElementById('visualFeedback');
+
+            joints.forEach((joint, index) => {
+                const visual = document.createElement('div');
+                visual.className = 'joint-visual';
+                visual.innerHTML = `
+                    <div class="joint-visual-name">J${index}</div>
+                    <div class="joint-visual-bar">
+                        <div class="joint-visual-fill" id="${joint.id}-fill"></div>
+                    </div>
+                `;
+                container.appendChild(visual);
+            });
+        }
+
+        function updateJoint(jointId, index) {
+            const slider = document.getElementById(jointId);
+            const value = parseFloat(slider.value);
+            const joint = joints[index];
+
+            // Update text values
+            document.getElementById(`${jointId}-rad`).textContent = `${value.toFixed(3)} rad`;
+            document.getElementById(`${jointId}-deg`).textContent = `(${(value * 180 / Math.PI).toFixed(1)}°)`;
+
+            // Update visual feedback
+            const range = joint.max - joint.min;
+            const percentage = ((value - joint.min) / range) * 100;
+            document.getElementById(`${jointId}-fill`).style.height = `${percentage}%`;
+
+            // Update output
+            updateOutput();
+        }
+
+        function updateOutput() {
+            const values = joints.map(joint => parseFloat(document.getElementById(joint.id).value));
+            const valuesStr = values.map(v => v.toFixed(3)).join(', ');
+
+            const pythonCode = `# SO-100 机械臂关节角度
+${valuesStr}
+
+# 完整Python数组格式：
+INITIAL_JOINTS = [${valuesStr}]
+
+# 在终端中粘贴（不含方括号）：
+${valuesStr}`;
+
+            document.getElementById('pythonCode').textContent = pythonCode;
+        }
+
+        function setPreset(presetName) {
+            const values = presets[presetName];
+            joints.forEach((joint, index) => {
+                document.getElementById(joint.id).value = values[index];
+                updateJoint(joint.id, index);
+            });
+        }
+
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            const button = event.target;
+
+            navigator.clipboard.writeText(text).then(() => {
+                button.textContent = '已复制!';
+                button.classList.add('copied');
+                setTimeout(() => {
+                    button.textContent = '复制';
+                    button.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
+        // Initialize on load
+        window.onload = init;
+    </script>
+</body>
+</html>
