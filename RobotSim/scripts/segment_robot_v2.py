@@ -32,9 +32,17 @@ INITIAL_JOINTS = [0, -3.32, 3.11, 1.18, 0, -0.174]
 # Genesis was scaled to 0.8 to match robot.ply
 GENESIS_SCALE = 0.8
 
-# 4x4 Transformation matrix from CloudCompare registration
-# This transforms robot.ply to align with scaled Genesis
-TRANSFORMATION_MATRIX = np.array([
+# Step 1: Coarse rotation - 90 degrees around Y axis
+# (robot.ply Z-axis -> Genesis X-axis)
+ROTATION_Y_90 = np.array([
+    [0,  0,  1],
+    [0,  1,  0],
+    [-1, 0,  0]
+])
+
+# Step 2: Fine adjustment from CloudCompare ICP
+# This is applied AFTER the 90-degree rotation
+FINE_TRANSFORM = np.array([
     [0.995,  -0.095,  0.019,  -0.009],
     [0.095,   0.996, -0.005,  -0.008],
     [-0.018,  0.007,  1.000,   0.024],
@@ -68,11 +76,15 @@ def get_link_point_clouds(arm):
     return point_clouds
 
 
-def transform_points(points, matrix):
-    """Apply 4x4 transformation matrix to points."""
-    ones = np.ones((len(points), 1))
-    points_homo = np.hstack([points, ones])
-    transformed = (matrix @ points_homo.T).T
+def transform_points(points, rotation, fine_transform):
+    """Apply coarse rotation + fine transform to points."""
+    # Step 1: Apply 90-degree rotation
+    rotated = (rotation @ points.T).T
+
+    # Step 2: Apply fine transform (rotation + translation from ICP)
+    ones = np.ones((len(rotated), 1))
+    points_homo = np.hstack([rotated, ones])
+    transformed = (fine_transform @ points_homo.T).T
     return transformed[:, :3]
 
 
@@ -157,8 +169,8 @@ def main():
     robot_xyz_original = robot_gau.xyz
     print(f"   Original points: {len(robot_xyz_original)}")
 
-    # Apply transformation
-    robot_xyz = transform_points(robot_xyz_original, TRANSFORMATION_MATRIX)
+    # Apply transformation: coarse rotation + fine adjustment
+    robot_xyz = transform_points(robot_xyz_original, ROTATION_Y_90, FINE_TRANSFORM)
     print(f"   Transformed range: [{robot_xyz.min():.4f}, {robot_xyz.max():.4f}]")
 
     # AABB filtering (SplatSim style)
