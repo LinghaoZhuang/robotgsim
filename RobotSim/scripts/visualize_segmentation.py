@@ -109,8 +109,8 @@ def main():
     ])
     robot_xyz = (R_y_90 @ robot_gau.xyz.T).T
 
-    # Step 2: Apply translation to align centers
-    translation = np.array([0.0376, -0.0048, 0.0788])
+    # Step 2: Apply ICP-optimized translation
+    translation = np.array([-0.0375, -0.0238, 0.0886])
     robot_xyz = robot_xyz + translation
 
     # Assign colors to each link

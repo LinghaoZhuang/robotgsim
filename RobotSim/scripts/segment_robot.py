@@ -135,11 +135,10 @@ def main():
     scene.build()
     print("   Genesis initialized successfully")
 
-    # 2. Set initial pose (ZERO POSE - matching robot.ply capture)
-    print("\n[2/6] Setting initial pose (ZERO POSE)...")
-    # robot.ply was captured at zero pose (vertical standing)
-    # NOT the task initial pose [0, -3.32, 3.11, 1.18, 0, -0.174]
-    INITIAL_JOINTS = [0, 0, 0, 0, 0, 0]
+    # 2. Set initial pose (matching robot.ply capture pose)
+    print("\n[2/6] Setting initial pose...")
+    # ICP analysis shows robot.ply was captured at this pose, not zero pose
+    INITIAL_JOINTS = [0, -3.32, 3.11, 1.18, 0, -0.174]
     arm.set_dofs_position(INITIAL_JOINTS)
     scene.step()
     print(f"   Initial joints: {INITIAL_JOINTS}")
@@ -171,9 +170,9 @@ def main():
     ])
     robot_xyz = (R_y_90 @ robot_gau.xyz.T).T
 
-    # Step 2: Apply translation to align centers
-    # Offset calculated by comparing Genesis and robot.ply centers
-    translation = np.array([0.0376, -0.0048, 0.0788])
+    # Step 2: Apply ICP-optimized translation to align centers
+    # Refined by ICP registration (fitness=0.9595, RMSE=0.016)
+    translation = np.array([-0.0375, -0.0238, 0.0886])
     robot_xyz = robot_xyz + translation
 
     print(f"   Transformed X range: [{robot_xyz[:,0].min():.4f}, {robot_xyz[:,0].max():.4f}]")
