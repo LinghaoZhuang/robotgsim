@@ -100,13 +100,10 @@ def main():
         color_name = ["Red", "Green", "Blue", "Yellow", "Magenta", "Cyan", "Orange"][i]
         print(f"  {color_name:10s} - {name}")
 
-    print("\nLaunching visualization...")
-    o3d.visualization.draw_geometries(
-        [pcd, coord_frame],
-        window_name="Genesis Ground Truth (KNN Training Data)",
-        width=1200,
-        height=800
-    )
+    print("\n" + "=" * 60)
+    print("To visualize, run in a separate terminal:")
+    print("  python scripts/view_ply.py data/genesis_ground_truth.ply")
+    print("=" * 60)
 
 
 if __name__ == "__main__":

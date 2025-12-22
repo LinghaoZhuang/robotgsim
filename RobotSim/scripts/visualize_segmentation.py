@@ -141,9 +141,14 @@ def main():
     # Create coordinate frame for reference
     coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2)
 
+    # Save to PLY for viewing
+    output_path = "data/robot_segmented.ply"
+    o3d.io.write_point_cloud(output_path, pcd)
+    print(f"\n   Saved to: {output_path}")
+
     # Visualize
     print("\n" + "=" * 60)
-    print("Launching visualization...")
+    print("Segmentation Results")
     print("=" * 60)
     print("\nColor legend:")
     for i, name in enumerate(LINK_NAMES):
@@ -154,12 +159,12 @@ def main():
     print("  - No scattered isolated points")
     print("  - Clear boundaries between links")
 
-    o3d.visualization.draw_geometries(
-        [pcd, coordinate_frame],
-        window_name="Robot Segmentation Visualization",
-        width=1200,
-        height=800
-    )
+    print("\n" + "=" * 60)
+    print("To visualize, run:")
+    print("  python scripts/view_ply.py data/robot_segmented.ply")
+    print("\nTo compare with Genesis ground truth:")
+    print("  python scripts/view_ply.py data/genesis_ground_truth.ply data/robot_segmented.ply")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
