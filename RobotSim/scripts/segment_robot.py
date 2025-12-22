@@ -143,10 +143,22 @@ def main():
     scene.step()
     print(f"   Initial joints: {INITIAL_JOINTS}")
 
-    # 3. Get link point clouds (world coordinates)
+    # 3. Get link point clouds (world coordinates) and scale by 0.8
     print("\n[3/6] Extracting link point clouds...")
     point_clouds = get_link_point_clouds_genesis(arm, LINK_NAMES)
 
+    # Scale Genesis mesh by 0.8 around center
+    all_points = np.vstack(point_clouds)
+    genesis_center = all_points.mean(axis=0)
+    scale_factor = 0.8
+
+    scaled_point_clouds = []
+    for pc in point_clouds:
+        scaled_pc = (pc - genesis_center) * scale_factor + genesis_center
+        scaled_point_clouds.append(scaled_pc)
+    point_clouds = scaled_point_clouds
+
+    print(f"   Applied scale factor: {scale_factor}")
     for i, (name, pc) in enumerate(zip(LINK_NAMES, point_clouds)):
         print(f"   {i}. {name:20s}: {len(pc):6d} vertices")
 
@@ -155,14 +167,13 @@ def main():
     knn = train_segmentation_knn(point_clouds, n_neighbors=10)
     print("   KNN training completed")
 
-    # 5. Load robot.ply and apply axis rotation + translation
+    # 5. Load robot.ply and apply full transformation
     print("\n[5/6] Loading robot.ply and applying transformation...")
     robot_gau = load_ply('exports/mult-view-scene/robot.ply')
     print(f"   Loaded {len(robot_gau.xyz)} Gaussians")
     print(f"   Original coordinate range: [{robot_gau.xyz.min():.4f}, {robot_gau.xyz.max():.4f}]")
 
     # Step 1: Rotate 90° around Y axis
-    # robot.ply has arm extending along +Z, Genesis has arm along +X
     R_y_90 = np.array([
         [0,  0,  1],
         [0,  1,  0],
@@ -170,10 +181,17 @@ def main():
     ])
     robot_xyz = (R_y_90 @ robot_gau.xyz.T).T
 
-    # Step 2: Apply ICP-optimized translation to align centers
-    # Refined by ICP registration (fitness=0.9595, RMSE=0.016)
-    translation = np.array([-0.0375, -0.0238, 0.0886])
-    robot_xyz = robot_xyz + translation
+    # Step 2: Apply ICP-refined rotation (from icp_with_scale.py)
+    icp_rotation = np.array([
+        [ 0.98012743, -0.09234054,  0.17556605],
+        [ 0.09228557,  0.99569634,  0.00849548],
+        [-0.17559495,  0.00787556,  0.984431  ]
+    ])
+    robot_xyz = (icp_rotation @ robot_xyz.T).T
+
+    # Step 3: Apply ICP-refined translation
+    icp_translation = np.array([0.0021, -0.0206, 0.1048])
+    robot_xyz = robot_xyz + icp_translation
 
     print(f"   Transformed X range: [{robot_xyz[:,0].min():.4f}, {robot_xyz[:,0].max():.4f}]")
     print(f"   Transformed Z range: [{robot_xyz[:,2].min():.4f}, {robot_xyz[:,2].max():.4f}]")

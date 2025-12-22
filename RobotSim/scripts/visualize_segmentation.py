@@ -96,7 +96,7 @@ def main():
         print("   Please run 'python scripts/segment_robot.py' first")
         sys.exit(1)
 
-    # Load robot.ply and apply transformation
+    # Load robot.ply and apply full transformation
     print("\n[2/3] Loading robot.ply and applying transformation...")
     robot_gau = load_ply('exports/mult-view-scene/robot.ply')
     print(f"   Loaded {len(robot_gau.xyz)} Gaussians")
@@ -109,9 +109,17 @@ def main():
     ])
     robot_xyz = (R_y_90 @ robot_gau.xyz.T).T
 
-    # Step 2: Apply ICP-optimized translation
-    translation = np.array([-0.0375, -0.0238, 0.0886])
-    robot_xyz = robot_xyz + translation
+    # Step 2: Apply ICP-refined rotation
+    icp_rotation = np.array([
+        [ 0.98012743, -0.09234054,  0.17556605],
+        [ 0.09228557,  0.99569634,  0.00849548],
+        [-0.17559495,  0.00787556,  0.984431  ]
+    ])
+    robot_xyz = (icp_rotation @ robot_xyz.T).T
+
+    # Step 3: Apply ICP-refined translation
+    icp_translation = np.array([0.0021, -0.0206, 0.1048])
+    robot_xyz = robot_xyz + icp_translation
 
     # Assign colors to each link
     print("\n[3/3] Creating colored point cloud...")
