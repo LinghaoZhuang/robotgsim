@@ -34,7 +34,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Base.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Base.STL" />
       </geometry>
       <material
         name="">
@@ -48,7 +48,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Base.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Base.STL" />
       </geometry>
     </collision>
   </link>
@@ -75,7 +75,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Shoulder_Rotation_Pitch.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Shoulder_Rotation_Pitch.STL" />
       </geometry>
       <material
         name="">
@@ -89,7 +89,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Shoulder_Rotation_Pitch.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Shoulder_Rotation_Pitch.STL" />
       </geometry>
     </collision>
   </link>
@@ -128,7 +128,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Upper_Arm.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Upper_Arm.STL" />
       </geometry>
       <material
         name="">
@@ -142,7 +142,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Upper_Arm.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Upper_Arm.STL" />
       </geometry>
     </collision>
   </link>
@@ -181,7 +181,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Lower_Arm.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Lower_Arm.STL" />
       </geometry>
       <material
         name="">
@@ -195,7 +195,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Lower_Arm.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Lower_Arm.STL" />
       </geometry>
     </collision>
   </link>
@@ -234,7 +234,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Wrist_Pitch_Roll.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Wrist_Pitch_Roll.STL" />
       </geometry>
       <material
         name="">
@@ -248,7 +248,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Wrist_Pitch_Roll.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Wrist_Pitch_Roll.STL" />
       </geometry>
     </collision>
   </link>
@@ -287,7 +287,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Fixed_Gripper.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Fixed_Gripper.STL" />
       </geometry>
       <material
         name="">
@@ -301,7 +301,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Fixed_Gripper.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Fixed_Gripper.STL" />
       </geometry>
     </collision>
   </link>
@@ -340,7 +340,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Moving_Jaw.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Moving_Jaw.STL" />
       </geometry>
       <material
         name="">
@@ -354,7 +354,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="/media/haoyu/BASE/code/RoboSimGS/assets/so100/assets/Moving_Jaw.STL" />
+          filename="/public/xingyuezhao/zhy/RobotSim/assets/Moving_Jaw.STL" />
       </geometry>
     </collision>
   </link>
