@@ -28,14 +28,17 @@ from Gaussians.util_gau import load_ply
 # Robot initial joint pose (should match robot.ply capture pose)
 INITIAL_JOINTS = [0, -3.32, 3.11, 1.18, 0, -0.174]
 
-# 4x4 Transformation matrix from splat coordinates to Genesis coordinates
-# Align robot.ply to Genesis in CloudCompare, then paste the matrix here
-# Format: splat_to_genesis = rotation @ splat + translation
+# Scale factor for Genesis points (from CloudCompare alignment)
+# Genesis was scaled to 0.8 to match robot.ply
+GENESIS_SCALE = 0.8
+
+# 4x4 Transformation matrix from CloudCompare registration
+# This transforms robot.ply to align with scaled Genesis
 TRANSFORMATION_MATRIX = np.array([
-    [0.0,  0.0,  1.0,  -0.0375],   # Row 0
-    [0.0,  1.0,  0.0,  -0.0238],   # Row 1
-    [-1.0, 0.0,  0.0,   0.0886],   # Row 2
-    [0.0,  0.0,  0.0,   1.0   ]    # Row 3 (homogeneous)
+    [0.995,  -0.095,  0.019,  -0.009],
+    [0.095,   0.996, -0.005,  -0.008],
+    [-0.018,  0.007,  1.000,   0.024],
+    [0.000,   0.000,  0.000,   1.000]
 ])
 
 # AABB adjustment (expand bounding box slightly)
@@ -123,6 +126,10 @@ def main():
     # 3. Get Genesis ground truth
     print("\n[3/6] Extracting Genesis ground truth...")
     point_clouds = get_link_point_clouds(arm)
+
+    # Apply scale to Genesis points (to match CloudCompare alignment)
+    point_clouds = [pc * GENESIS_SCALE for pc in point_clouds]
+    print(f"   Applied scale factor: {GENESIS_SCALE}")
 
     all_genesis_points = np.vstack(point_clouds)
     print(f"   Total Genesis points: {len(all_genesis_points)}")
