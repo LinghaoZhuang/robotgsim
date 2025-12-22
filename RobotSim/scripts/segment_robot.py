@@ -156,17 +156,25 @@ def main():
     knn = train_segmentation_knn(point_clouds, n_neighbors=10)
     print("   KNN training completed")
 
-    # 5. Load robot.ply (already in world coordinates at zero pose)
-    print("\n[5/6] Loading robot.ply...")
+    # 5. Load robot.ply and apply axis rotation
+    print("\n[5/6] Loading robot.ply and applying axis rotation...")
     robot_gau = load_ply('exports/mult-view-scene/robot.ply')
     print(f"   Loaded {len(robot_gau.xyz)} Gaussians")
-    print(f"   Coordinate range: [{robot_gau.xyz.min():.4f}, {robot_gau.xyz.max():.4f}]")
+    print(f"   Original coordinate range: [{robot_gau.xyz.min():.4f}, {robot_gau.xyz.max():.4f}]")
 
-    # Note: robot.ply is captured at zero pose in world coordinates
-    # No splat_to_world transform needed since it's already aligned
-    robot_xyz = robot_gau.xyz
+    # robot.ply has arm extending along +Z, Genesis has arm along -Y
+    # Apply rotation: 90° around X axis
+    # new_x = old_x, new_y = -old_z, new_z = old_y
+    R_x_90 = np.array([
+        [1,  0,  0],
+        [0,  0, -1],
+        [0,  1,  0]
+    ])
+    robot_xyz = (R_x_90 @ robot_gau.xyz.T).T
+    print(f"   Rotated coordinate range: [{robot_xyz.min():.4f}, {robot_xyz.max():.4f}]")
+    print(f"   Rotated Y range: [{robot_xyz[:,1].min():.4f}, {robot_xyz[:,1].max():.4f}]")
 
-    # 6. Segment using robot.ply coordinates directly
+    # 6. Segment using rotated coordinates
     print("\n[6/6] Segmenting Gaussians...")
     labels = segment_gaussians(robot_xyz, knn)
 

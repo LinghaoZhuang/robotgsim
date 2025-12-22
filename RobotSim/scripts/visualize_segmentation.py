@@ -96,13 +96,18 @@ def main():
         print("   Please run 'python scripts/segment_robot.py' first")
         sys.exit(1)
 
-    # Load robot.ply (already in world coordinates)
-    print("\n[2/3] Loading robot.ply...")
+    # Load robot.ply and apply axis rotation
+    print("\n[2/3] Loading robot.ply and applying axis rotation...")
     robot_gau = load_ply('exports/mult-view-scene/robot.ply')
     print(f"   Loaded {len(robot_gau.xyz)} Gaussians")
 
-    # robot.ply is already in world coordinates at zero pose
-    robot_xyz = robot_gau.xyz
+    # Apply same rotation as segment_robot.py: 90° around X axis
+    R_x_90 = np.array([
+        [1,  0,  0],
+        [0,  0, -1],
+        [0,  1,  0]
+    ])
+    robot_xyz = (R_x_90 @ robot_gau.xyz.T).T
 
     # Assign colors to each link
     print("\n[3/3] Creating colored point cloud...")
