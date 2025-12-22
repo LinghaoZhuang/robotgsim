@@ -156,26 +156,30 @@ def main():
     knn = train_segmentation_knn(point_clouds, n_neighbors=10)
     print("   KNN training completed")
 
-    # 5. Load robot.ply and apply axis rotation
-    print("\n[5/6] Loading robot.ply and applying axis rotation...")
+    # 5. Load robot.ply and apply axis rotation + translation
+    print("\n[5/6] Loading robot.ply and applying transformation...")
     robot_gau = load_ply('exports/mult-view-scene/robot.ply')
     print(f"   Loaded {len(robot_gau.xyz)} Gaussians")
     print(f"   Original coordinate range: [{robot_gau.xyz.min():.4f}, {robot_gau.xyz.max():.4f}]")
 
-    # robot.ply has arm extending along +Z
-    # Genesis (with euler=(0,0,90)) has arm extending along +X
-    # Apply rotation: 90° around Y axis
-    # new_x = old_z, new_y = old_y, new_z = -old_x
+    # Step 1: Rotate 90° around Y axis
+    # robot.ply has arm extending along +Z, Genesis has arm along +X
     R_y_90 = np.array([
         [0,  0,  1],
         [0,  1,  0],
         [-1, 0,  0]
     ])
     robot_xyz = (R_y_90 @ robot_gau.xyz.T).T
-    print(f"   Rotated coordinate range: [{robot_xyz.min():.4f}, {robot_xyz.max():.4f}]")
-    print(f"   Rotated X range: [{robot_xyz[:,0].min():.4f}, {robot_xyz[:,0].max():.4f}]")
 
-    # 6. Segment using rotated coordinates
+    # Step 2: Apply translation to align centers
+    # Offset calculated by comparing Genesis and robot.ply centers
+    translation = np.array([0.0376, -0.0048, 0.0788])
+    robot_xyz = robot_xyz + translation
+
+    print(f"   Transformed X range: [{robot_xyz[:,0].min():.4f}, {robot_xyz[:,0].max():.4f}]")
+    print(f"   Transformed Z range: [{robot_xyz[:,2].min():.4f}, {robot_xyz[:,2].max():.4f}]")
+
+    # 6. Segment using transformed coordinates
     print("\n[6/6] Segmenting Gaussians...")
     labels = segment_gaussians(robot_xyz, knn)
 
