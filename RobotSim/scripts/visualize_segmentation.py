@@ -101,13 +101,13 @@ def main():
     robot_gau = load_ply('exports/mult-view-scene/robot.ply')
     print(f"   Loaded {len(robot_gau.xyz)} Gaussians")
 
-    # Apply same rotation as segment_robot.py: 90° around X axis
-    R_x_90 = np.array([
-        [1,  0,  0],
-        [0,  0, -1],
-        [0,  1,  0]
+    # Apply same rotation as segment_robot.py: 90° around Y axis
+    R_y_90 = np.array([
+        [0,  0,  1],
+        [0,  1,  0],
+        [-1, 0,  0]
     ])
-    robot_xyz = (R_x_90 @ robot_gau.xyz.T).T
+    robot_xyz = (R_y_90 @ robot_gau.xyz.T).T
 
     # Assign colors to each link
     print("\n[3/3] Creating colored point cloud...")

@@ -162,17 +162,18 @@ def main():
     print(f"   Loaded {len(robot_gau.xyz)} Gaussians")
     print(f"   Original coordinate range: [{robot_gau.xyz.min():.4f}, {robot_gau.xyz.max():.4f}]")
 
-    # robot.ply has arm extending along +Z, Genesis has arm along -Y
-    # Apply rotation: 90° around X axis
-    # new_x = old_x, new_y = -old_z, new_z = old_y
-    R_x_90 = np.array([
-        [1,  0,  0],
-        [0,  0, -1],
-        [0,  1,  0]
+    # robot.ply has arm extending along +Z
+    # Genesis (with euler=(0,0,90)) has arm extending along +X
+    # Apply rotation: 90° around Y axis
+    # new_x = old_z, new_y = old_y, new_z = -old_x
+    R_y_90 = np.array([
+        [0,  0,  1],
+        [0,  1,  0],
+        [-1, 0,  0]
     ])
-    robot_xyz = (R_x_90 @ robot_gau.xyz.T).T
+    robot_xyz = (R_y_90 @ robot_gau.xyz.T).T
     print(f"   Rotated coordinate range: [{robot_xyz.min():.4f}, {robot_xyz.max():.4f}]")
-    print(f"   Rotated Y range: [{robot_xyz[:,1].min():.4f}, {robot_xyz[:,1].max():.4f}]")
+    print(f"   Rotated X range: [{robot_xyz[:,0].min():.4f}, {robot_xyz[:,0].max():.4f}]")
 
     # 6. Segment using rotated coordinates
     print("\n[6/6] Segmenting Gaussians...")
