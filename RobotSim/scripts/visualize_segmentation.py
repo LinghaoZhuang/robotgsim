@@ -96,15 +96,13 @@ def main():
         print("   Please run 'python scripts/segment_robot.py' first")
         sys.exit(1)
 
-    # Load robot.ply and transform to world coordinates
-    print("\n[2/3] Loading robot.ply and transforming to world coordinates...")
+    # Load robot.ply (already in world coordinates)
+    print("\n[2/3] Loading robot.ply...")
     robot_gau = load_ply('exports/mult-view-scene/robot.ply')
     print(f"   Loaded {len(robot_gau.xyz)} Gaussians")
 
-    # Transform to world coordinates for proper visualization
-    splat_to_world = get_splat_to_world_transform()
-    robot_xyz_world = transform_points(robot_gau.xyz, splat_to_world)
-    print(f"   Transformed to world coordinates")
+    # robot.ply is already in world coordinates at zero pose
+    robot_xyz = robot_gau.xyz
 
     # Assign colors to each link
     print("\n[3/3] Creating colored point cloud...")
@@ -118,9 +116,9 @@ def main():
         [1.0, 0.5, 0.0],    # Moving_Jaw - Orange
     ])
 
-    # Create colored point cloud (using world coordinates)
+    # Create colored point cloud
     pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(robot_xyz_world)
+    pcd.points = o3d.utility.Vector3dVector(robot_xyz)
     pcd.colors = o3d.utility.Vector3dVector(colors[labels])
 
     # Print statistics

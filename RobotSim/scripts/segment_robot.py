@@ -135,9 +135,11 @@ def main():
     scene.build()
     print("   Genesis initialized successfully")
 
-    # 2. Set initial pose
-    print("\n[2/6] Setting initial pose...")
-    INITIAL_JOINTS = [0, -3.32, 3.11, 1.18, 0, -0.174]
+    # 2. Set initial pose (ZERO POSE - matching robot.ply capture)
+    print("\n[2/6] Setting initial pose (ZERO POSE)...")
+    # robot.ply was captured at zero pose (vertical standing)
+    # NOT the task initial pose [0, -3.32, 3.11, 1.18, 0, -0.174]
+    INITIAL_JOINTS = [0, 0, 0, 0, 0, 0]
     arm.set_dofs_position(INITIAL_JOINTS)
     scene.step()
     print(f"   Initial joints: {INITIAL_JOINTS}")
@@ -154,20 +156,19 @@ def main():
     knn = train_segmentation_knn(point_clouds, n_neighbors=10)
     print("   KNN training completed")
 
-    # 5. Load robot.ply and transform to world coordinates
-    print("\n[5/6] Loading robot.ply and transforming to world coordinates...")
+    # 5. Load robot.ply (already in world coordinates at zero pose)
+    print("\n[5/6] Loading robot.ply...")
     robot_gau = load_ply('exports/mult-view-scene/robot.ply')
     print(f"   Loaded {len(robot_gau.xyz)} Gaussians")
-    print(f"   Splat coordinate range: [{robot_gau.xyz.min():.4f}, {robot_gau.xyz.max():.4f}]")
+    print(f"   Coordinate range: [{robot_gau.xyz.min():.4f}, {robot_gau.xyz.max():.4f}]")
 
-    # Transform robot.ply from Splat to World coordinates
-    splat_to_world = get_splat_to_world_transform()
-    robot_xyz_world = transform_points(robot_gau.xyz, splat_to_world)
-    print(f"   World coordinate range: [{robot_xyz_world.min():.4f}, {robot_xyz_world.max():.4f}]")
+    # Note: robot.ply is captured at zero pose in world coordinates
+    # No splat_to_world transform needed since it's already aligned
+    robot_xyz = robot_gau.xyz
 
-    # 6. Segment using world coordinates
-    print("\n[6/6] Segmenting Gaussians (in world coordinates)...")
-    labels = segment_gaussians(robot_xyz_world, knn)
+    # 6. Segment using robot.ply coordinates directly
+    print("\n[6/6] Segmenting Gaussians...")
+    labels = segment_gaussians(robot_xyz, knn)
 
     # Save labels
     output_path = 'data/labels/so100_labels.npy'
