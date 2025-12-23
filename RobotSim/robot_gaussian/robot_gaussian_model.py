@@ -96,6 +96,7 @@ class RobotGaussianModel:
         # 6. Backup original Gaussian data (now in World coordinates)
         self.backup_xyz = self.gaussians.xyz.clone()
         self.backup_rot = self.gaussians.rot.clone()
+        self.backup_scale = self.gaussians.scale.clone()
         self.backup_sh = self.gaussians.sh.clone()
 
     def _apply_splat_to_world_transform(self, config):
@@ -145,6 +146,7 @@ class RobotGaussianModel:
         # Restore from backup (world coordinates)
         self.gaussians.xyz = self.backup_xyz.clone()
         self.gaussians.rot = self.backup_rot.clone()
+        self.gaussians.scale = self.backup_scale.clone()
         self.gaussians.sh = self.backup_sh.clone()
 
         # Compute FK transformations

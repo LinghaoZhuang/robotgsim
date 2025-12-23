@@ -61,25 +61,38 @@ def transform_means(gau, segmented_list, transformations_list, world_to_splat):
 
     # ===== Step 2: Transform to COLMAP coordinate system (align with background) =====
     # Extract rotation and translation from world_to_splat
-    R_w2s = world_to_splat[:3, :3]
+    # Note: world_to_splat may contain scale, so we need to handle it carefully
+    R_w2s_with_scale = world_to_splat[:3, :3]
     T_w2s = world_to_splat[:3, 3]
 
-    # 2.1 Transform position
-    xyz = (R_w2s @ xyz.T).T + T_w2s
+    # Extract pure rotation matrix (normalize to remove scale)
+    # SVD decomposition: R_scaled = U @ S @ V^T, pure rotation = U @ V^T
+    U, S, Vh = torch.linalg.svd(R_w2s_with_scale)
+    R_w2s_pure = U @ Vh  # Pure rotation matrix (det = 1)
 
-    # 2.2 Transform Gaussian rotation
+    # Extract scale factor (geometric mean of singular values)
+    scale_factor = S.prod().pow(1/3)
+
+    # 2.1 Transform position (with scale)
+    xyz = (R_w2s_with_scale @ xyz.T).T + T_w2s
+
+    # 2.2 Transform Gaussian rotation (pure rotation only, no scale)
     rot_mat_all = o3.quaternion_to_matrix(rot)  # (N, 3, 3)
-    rot_mat_all = R_w2s @ rot_mat_all
+    rot_mat_all = R_w2s_pure @ rot_mat_all
     rot = o3.matrix_to_quaternion(rot_mat_all)
 
-    # 2.3 Rotate SH coefficients
+    # 2.3 Scale Gaussian scale parameters
+    scale = gau.scale * scale_factor
+
+    # 2.4 Rotate SH coefficients (pure rotation only)
     shs_dc_all = sh[:, :1, :]       # (N, 1, 3)
     shs_rest_all = sh[:, 1:, :]     # (N, 15, 3)
-    shs_rest_all = transform_shs(shs_rest_all, R_w2s)
+    shs_rest_all = transform_shs(shs_rest_all, R_w2s_pure)
     sh = torch.cat([shs_dc_all, shs_rest_all], dim=1)
 
     # ===== Step 3: Update Gaussian data =====
     gau.xyz = xyz
     gau.rot = rot
+    gau.scale = scale
     gau.sh = sh
     return gau
