@@ -104,26 +104,35 @@ def transform_means(gau, segmented_list, transformations_list, world_to_splat):
 def transform_means_scaled(gau, segmented_list, transformations_list, world_to_splat,
                            genesis_center, genesis_scale):
     """
-    Apply FK transformations in scaled coordinate system, then transform to COLMAP.
+    Apply FK transformations in scaled coordinate system, then convert to unscaled Genesis space.
 
-    This function is used when robot.ply is aligned to Genesis*scale (e.g., 0.8).
-    The FK transforms should also be computed in scaled space using
-    get_transformation_list_scaled().
+    Key insight: Background Gaussians are in Genesis/simulator coordinate space.
+    The viewmatrix in get_obs_pure_gs() is from Genesis camera.
+    So robot should also end up in Genesis/simulator space (unscaled), NOT COLMAP.
+
+    Pipeline:
+    1. Input: robot in scaled World (Genesis*0.8, after ICP alignment)
+    2. Apply FK in scaled space
+    3. Unscale from Genesis*0.8 to Genesis*1.0
+    4. Output: robot in unscaled Genesis/simulator space (matching background)
 
     Args:
         gau: GaussianDataCUDA with attributes (xyz, rot, scale, opacity, sh)
         segmented_list: List of indices for each link (7 elements)
         transformations_list: List of (R_rel, T_scaled) from get_transformation_list_scaled
-        world_to_splat: (4,4) transformation matrix - INVERSE of ICP (scaled World → COLMAP)
+        world_to_splat: NOT USED - kept for API compatibility
         genesis_center: Center point used for scaling (numpy array, shape (3,))
-        genesis_scale: Scale factor (e.g., 0.8) - NOT USED anymore, kept for API compatibility
+        genesis_scale: Scale factor (e.g., 0.8)
 
     Returns:
         Modified gau with updated xyz, rot, scale, and sh
     """
-    xyz = gau.xyz.clone()  # In scaled world coordinates
+    xyz = gau.xyz.clone()  # In scaled world coordinates (Genesis*0.8)
     rot = gau.rot.clone()  # wxyz format
     sh = gau.sh.clone()    # (N, 16, 3)
+
+    # Convert genesis_center to tensor
+    C = torch.tensor(genesis_center, device='cuda', dtype=torch.float32)
 
     # ===== Step 1: Apply FK transformations in scaled coordinate system =====
     # Base (index 0) does not transform, start from joint 0
@@ -146,29 +155,19 @@ def transform_means_scaled(gau, segmented_list, transformations_list, world_to_s
         shs_rest = transform_shs(shs_rest, R_rel)
         sh[segment] = torch.cat([shs_dc, shs_rest], dim=1)
 
-    # ===== Step 2: Transform directly from scaled World to COLMAP =====
-    # world_to_splat is now the EXACT inverse of splat_to_world (ICP)
-    # No need to unscale first - the inverse ICP handles everything
-    R_w2s = world_to_splat[:3, :3]
-    T_w2s = world_to_splat[:3, 3]
+    # ===== Step 2: Convert from scaled World to unscaled Genesis/simulator space =====
+    # scaled = (unscaled - C) * scale + C
+    # => unscaled = (scaled - C) / scale + C
+    xyz_unscaled = (xyz - C) / genesis_scale + C
 
-    # 2.1 Transform position
-    xyz_colmap = (R_w2s @ xyz.T).T + T_w2s
-
-    # 2.2 Transform Gaussian rotation (pure rotation, no scale in inverse ICP)
-    rot_mat_all = o3.quaternion_to_matrix(rot)
-    rot_mat_all = R_w2s @ rot_mat_all
-    rot_colmap = o3.matrix_to_quaternion(rot_mat_all)
-
-    # 2.3 Rotate SH coefficients
-    shs_dc_all = sh[:, :1, :]
-    shs_rest_all = sh[:, 1:, :]
-    shs_rest_all = transform_shs(shs_rest_all, R_w2s)
-    sh_colmap = torch.cat([shs_dc_all, shs_rest_all], dim=1)
+    # Scale Gaussian scale parameters accordingly
+    scale_unscaled = gau.scale / genesis_scale
 
     # ===== Step 3: Update Gaussian data =====
-    # Note: scale is NOT modified since inverse ICP is pure rotation + translation
-    gau.xyz = xyz_colmap
-    gau.rot = rot_colmap
-    gau.sh = sh_colmap
+    # Robot is now in unscaled Genesis/simulator space (matching background)
+    gau.xyz = xyz_unscaled
+    gau.scale = scale_unscaled
+    # rot and sh stay the same (rotation doesn't change with uniform scaling)
+    gau.rot = rot
+    gau.sh = sh
     return gau
