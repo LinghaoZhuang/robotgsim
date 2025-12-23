@@ -1398,7 +1398,7 @@ def transform_matrix2(translation, rotation):
     T_translate[:3, 3] = translation
 
     # 2) 旋转中心 = 平移后的局部坐标原点
-    center = translation  
+    center = np.array(translation)
 
     T_neg = np.eye(4)
     T_neg[:3, 3] = -center
@@ -1434,8 +1434,8 @@ def scale_matrix(s):
         [0,  0,  0,  1]
     ])
 
-def transform_matrix3(translation=(0.5,0.5,-0.5), 
-                     rotation=(30,60,-180), 
+def transform_matrix3(translation=(0.5,0.5,-0.5),
+                     rotation=(30,60,-180),
                      scale=1.0):
     # 1) 初始整体平移 (supersplat拖动操作)
 
@@ -1443,7 +1443,7 @@ def transform_matrix3(translation=(0.5,0.5,-0.5),
     T_translate[:3, 3] = translation
 
     # 2) 旋转中心 = 平移后的局部坐标原点
-    center = translation  
+    center = np.array(translation)
 
     T_neg = np.eye(4)
     T_neg[:3, 3] = -center
