@@ -31,6 +31,10 @@ DEFAULT_ICP_ROTATION = np.array([
 ], dtype=np.float32)
 DEFAULT_ICP_TRANSLATION = np.array([0.0021, -0.0206, 0.1048], dtype=np.float32)
 
+# Scale factor used during KNN training (Genesis was scaled by this)
+# robot.ply was aligned to scaled Genesis, so we need to scale it back
+DEFAULT_GENESIS_SCALE = 0.8
+
 
 @dataclass
 class RobotGaussianConfig:
@@ -45,6 +49,10 @@ class RobotGaussianConfig:
     R_y_90: np.ndarray = field(default_factory=lambda: DEFAULT_R_Y_90)
     icp_rotation: np.ndarray = field(default_factory=lambda: DEFAULT_ICP_ROTATION)
     icp_translation: np.ndarray = field(default_factory=lambda: DEFAULT_ICP_TRANSLATION)
+
+    # Scale factor: Genesis was scaled by this for ICP alignment
+    # We need to scale robot.ply by 1/genesis_scale to match unscaled Genesis for FK
+    genesis_scale: float = DEFAULT_GENESIS_SCALE
 
     def __post_init__(self):
         if self.initial_joint_states is None:
@@ -83,44 +91,67 @@ class RobotGaussianModel:
             config.world_to_splat, device='cuda', dtype=torch.float32
         )
 
-        # 4. Apply splat_to_world transformation (COLMAP → World)
+        # 4. Set arm to initial pose FIRST (needed for genesis_center calculation)
+        arm.set_dofs_position(config.initial_joint_states)
+        # scene.step() should be called externally before this
+
+        # 5. Apply splat_to_world transformation (COLMAP → World)
         # This converts robot.ply from COLMAP coords to World coords
         # Must match the transformation used in segment_robot.py for KNN training
-        self._apply_splat_to_world_transform(config)
+        # Also scales robot.ply to match unscaled Genesis for FK
+        self._apply_splat_to_world_transform(config, arm)
 
-        # 5. Save initial link states (at reference pose)
-        arm.set_dofs_position(config.initial_joint_states)
-        # scene.step() should be called externally
+        # 6. Save initial link states (at reference pose)
         self.initial_link_states = get_link_states_genesis(arm, LINK_NAMES)
 
-        # 6. Backup original Gaussian data (now in World coordinates)
+        # 7. Backup original Gaussian data (now in World coordinates)
         self.backup_xyz = self.gaussians.xyz.clone()
         self.backup_rot = self.gaussians.rot.clone()
         self.backup_scale = self.gaussians.scale.clone()
         self.backup_sh = self.gaussians.sh.clone()
 
-    def _apply_splat_to_world_transform(self, config):
+    def _apply_splat_to_world_transform(self, config, arm):
         """
         Apply splat_to_world transformation to convert robot.ply from COLMAP to World coords.
         This must match the transformation used in segment_robot.py for KNN training.
 
         The transformation is:
-            xyz_world = icp_rotation @ (R_y_90 @ xyz_colmap) + icp_translation
+            1. xyz_aligned = icp_rotation @ (R_y_90 @ xyz_colmap) + icp_translation
+               (This aligns robot.ply with Genesis scaled by 0.8)
+            2. xyz_world = (xyz_aligned - genesis_center) / genesis_scale + genesis_center
+               (This scales robot.ply back to match unscaled Genesis for FK)
 
         Args:
             config: Configuration with transformation parameters
+            arm: Genesis arm entity (needed to compute genesis_center)
         """
         # Get transformation parameters
         R_y_90 = torch.tensor(config.R_y_90, device='cuda', dtype=torch.float32)
         icp_rotation = torch.tensor(config.icp_rotation, device='cuda', dtype=torch.float32)
         icp_translation = torch.tensor(config.icp_translation, device='cuda', dtype=torch.float32)
+        genesis_scale = config.genesis_scale
 
         # Combined rotation: R_combined = icp_rotation @ R_y_90
         R_combined = icp_rotation @ R_y_90
 
-        # Transform position: xyz_world = R_combined @ xyz + icp_translation
+        # Step 1: Transform position to align with scaled Genesis
         xyz = self.gaussians.xyz
-        self.gaussians.xyz = (R_combined @ xyz.T).T + icp_translation
+        xyz_aligned = (R_combined @ xyz.T).T + icp_translation
+
+        # Step 2: Compute genesis_center from current Genesis mesh
+        # (arm should be at initial pose at this point)
+        genesis_points = []
+        for name in LINK_NAMES:
+            link = arm.get_link(name)
+            verts = link.get_vverts().cpu().numpy()
+            genesis_points.append(verts)
+        genesis_all = np.vstack(genesis_points)
+        genesis_center = torch.tensor(genesis_all.mean(axis=0), device='cuda', dtype=torch.float32)
+
+        # Step 3: Scale robot.ply to match unscaled Genesis
+        # robot.ply was aligned to Genesis*0.8, so scale by 1/0.8 to match Genesis*1.0
+        xyz_world = (xyz_aligned - genesis_center) / genesis_scale + genesis_center
+        self.gaussians.xyz = xyz_world
 
         # Transform Gaussian rotation (quaternion)
         # PLY uses wxyz quaternion format, e3nn also uses wxyz
@@ -135,6 +166,9 @@ class RobotGaussianModel:
         shs_rest = sh[:, 1:, :]     # (N, 15, 3) - rest rotated
         shs_rest = transform_shs(shs_rest, R_combined)
         self.gaussians.sh = torch.cat([shs_dc, shs_rest], dim=1)
+
+        # Scale Gaussian scale parameters (inverse of genesis_scale)
+        self.gaussians.scale = self.gaussians.scale / genesis_scale
 
     def update(self, arm):
         """
