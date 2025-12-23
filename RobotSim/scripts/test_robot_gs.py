@@ -103,9 +103,12 @@ def main():
 
     # 3. Initialize Robot Gaussian Model
     print("\n[3/5] Initializing Robot Gaussian Model...")
-    scene.step()  # Ensure arm is at initial pose
+    # CRITICAL: Set arm to initial pose AND step BEFORE creating RobotGaussianModel
+    # Genesis requires scene.step() to actually update positions
+    arm.set_dofs_position(config.initial_joint_states)
+    scene.step()  # This step actually moves the arm
     robot_model = RobotGaussianModel(config, arm)
-    scene.step()  # Step after model initialization
+    # No need for extra step - model reads positions immediately
 
     print(f"   Robot Gaussians: {len(robot_model.gaussians.xyz)}")
     print(f"   Segments: {[len(s) for s in robot_model.segmented_list]}")
@@ -147,37 +150,70 @@ def main():
     arm.set_dofs_position(new_joints)
     scene.step()
 
-    # Update robot model
-    robot_model.update(arm)
+    # Get Genesis at new pose for comparison
+    genesis_new_points = []
+    for name in LINK_NAMES:
+        link = arm.get_link(name)
+        verts = link.get_vverts().cpu().numpy()
+        genesis_new_points.append(verts)
+    genesis_new_all = np.vstack(genesis_new_points)
 
-    # Get transformed positions
-    transformed_xyz = robot_model.gaussians.xyz.cpu().numpy()
-    print(f"   After FK - X range: [{transformed_xyz[:,0].min():.4f}, {transformed_xyz[:,0].max():.4f}]")
-    print(f"   After FK - Z range: [{transformed_xyz[:,2].min():.4f}, {transformed_xyz[:,2].max():.4f}]")
+    # Manually apply FK to robot Gaussians (without world_to_splat)
+    from robot_gaussian.forward_kinematics import get_transformation_list
+    transformations = get_transformation_list(arm, robot_model.initial_link_states, LINK_NAMES)
+
+    # Start from backup (World coords)
+    robot_xyz_fk = robot_model.backup_xyz.clone()
+
+    # Apply FK transforms per link
+    for joint_idx, (R_rel, T) in enumerate(transformations):
+        segment = robot_model.segmented_list[joint_idx + 1]  # +1 to skip Base
+        if len(segment) > 0:
+            robot_xyz_fk[segment] = (R_rel @ robot_xyz_fk[segment].T).T + T
+
+    robot_xyz_fk_np = robot_xyz_fk.cpu().numpy()
+
+    print(f"   Genesis new pose X range: [{genesis_new_all[:,0].min():.4f}, {genesis_new_all[:,0].max():.4f}]")
+    print(f"   Robot FK X range: [{robot_xyz_fk_np[:,0].min():.4f}, {robot_xyz_fk_np[:,0].max():.4f}]")
+
+    # Compute alignment error at new pose
+    pcd_genesis_new = o3d.geometry.PointCloud()
+    pcd_genesis_new.points = o3d.utility.Vector3dVector(genesis_new_all)
+    pcd_robot_fk = o3d.geometry.PointCloud()
+    pcd_robot_fk.points = o3d.utility.Vector3dVector(robot_xyz_fk_np)
+
+    dists_fk = pcd_robot_fk.compute_point_cloud_distance(pcd_genesis_new)
+    mean_dist_fk = np.mean(dists_fk)
+    print(f"   Mean FK alignment error: {mean_dist_fk:.4f}")
 
     # Save point clouds for visualization
     print("\n" + "=" * 60)
     print("Saving point clouds for visualization...")
 
-    # Save Genesis (gray)
+    # Save Genesis at initial pose (gray)
     pcd_genesis.paint_uniform_color([0.5, 0.5, 0.5])
-    o3d.io.write_point_cloud("data/test_genesis.ply", pcd_genesis)
+    o3d.io.write_point_cloud("data/test_genesis_initial.ply", pcd_genesis)
 
     # Save robot GS at initial pose (green)
     pcd_robot.paint_uniform_color([0.0, 0.8, 0.0])
     o3d.io.write_point_cloud("data/test_robot_initial.ply", pcd_robot)
 
-    # Save robot GS after FK (blue)
-    pcd_fk = o3d.geometry.PointCloud()
-    pcd_fk.points = o3d.utility.Vector3dVector(transformed_xyz)
-    pcd_fk.paint_uniform_color([0.0, 0.0, 0.8])
-    o3d.io.write_point_cloud("data/test_robot_fk.ply", pcd_fk)
+    # Save Genesis at NEW pose (gray) - for FK comparison
+    pcd_genesis_new.paint_uniform_color([0.5, 0.5, 0.5])
+    o3d.io.write_point_cloud("data/test_genesis_new.ply", pcd_genesis_new)
 
-    print("   Saved: data/test_genesis.ply (gray)")
-    print("   Saved: data/test_robot_initial.ply (green)")
-    print("   Saved: data/test_robot_fk.ply (blue)")
-    print("\nTo visualize:")
-    print("   python scripts/view_ply.py data/test_genesis.ply data/test_robot_initial.ply")
+    # Save robot GS after FK (blue) - using robot_xyz_fk_np (World coords)
+    pcd_robot_fk.paint_uniform_color([0.0, 0.0, 0.8])
+    o3d.io.write_point_cloud("data/test_robot_fk.ply", pcd_robot_fk)
+
+    print("   Saved: data/test_genesis_initial.ply (gray) - initial pose")
+    print("   Saved: data/test_robot_initial.ply (green) - initial pose")
+    print("   Saved: data/test_genesis_new.ply (gray) - new pose")
+    print("   Saved: data/test_robot_fk.ply (blue) - FK result")
+    print("\nTo visualize initial alignment:")
+    print("   python scripts/view_ply.py data/test_genesis_initial.ply data/test_robot_initial.ply")
+    print("\nTo visualize FK result:")
+    print("   python scripts/view_ply.py data/test_genesis_new.ply data/test_robot_fk.ply")
     print("=" * 60)
     print("Test completed!")
 

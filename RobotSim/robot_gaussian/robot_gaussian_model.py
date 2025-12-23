@@ -91,9 +91,9 @@ class RobotGaussianModel:
             config.world_to_splat, device='cuda', dtype=torch.float32
         )
 
-        # 4. Set arm to initial pose FIRST (needed for genesis_center calculation)
-        arm.set_dofs_position(config.initial_joint_states)
-        # scene.step() should be called externally before this
+        # 4. IMPORTANT: Arm must already be at initial pose before calling this!
+        # The caller should do: arm.set_dofs_position(initial_joints); scene.step()
+        # This ensures Genesis mesh and link states are at the correct pose.
 
         # 5. Apply splat_to_world transformation (COLMAP → World)
         # This converts robot.ply from COLMAP coords to World coords
