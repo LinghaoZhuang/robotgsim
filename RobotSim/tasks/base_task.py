@@ -420,30 +420,47 @@ class DataCollector:
         """Initialize pure GS rendering robot model."""
         from robot_gaussian.robot_gaussian_model import RobotGaussianConfig
 
-        # Compute world_to_splat using base_task.py's transform_matrix3
-        supersplat_transform = transform_matrix3(
+        # Left camera transform (must match init_mult_view_pose)
+        supersplat_transform_left = transform_matrix3(
             translation=[0.34, 0.09, 0.42],
             rotation=[-34.29, 11.67, -180-47.35],
             scale=0.81
         )
-        world_to_splat = np.linalg.inv(supersplat_transform)
+        world_to_splat_left = np.linalg.inv(supersplat_transform_left)
 
-        config = RobotGaussianConfig(
+        # Right camera transform (must match init_mult_view_pose)
+        supersplat_transform_right = transform_matrix3(
+            translation=[0.363, -0.212, 0.383],
+            rotation=[-37.95, 20.8, -180-107.2],
+            scale=0.721
+        )
+        world_to_splat_right = np.linalg.inv(supersplat_transform_right)
+
+        initial_joint_states = [0, -3.32, 3.11, 1.18, 0, -0.174]
+
+        config_left = RobotGaussianConfig(
             robot_ply_path='exports/mult-view-scene/robot.ply',
             labels_path='data/labels/so100_labels.npy',
-            initial_joint_states=[0, -3.32, 3.11, 1.18, 0, -0.174],
-            world_to_splat=world_to_splat
+            initial_joint_states=initial_joint_states,
+            world_to_splat=world_to_splat_left
+        )
+
+        config_right = RobotGaussianConfig(
+            robot_ply_path='exports/mult-view-scene/robot.ply',
+            labels_path='data/labels/so100_labels.npy',
+            initial_joint_states=initial_joint_states,
+            world_to_splat=world_to_splat_right
         )
 
         # Initialize robot to reference pose and record link states
-        self.arm.set_dofs_position(config.initial_joint_states)
+        self.arm.set_dofs_position(initial_joint_states)
         self.scene.step()
 
-        # Setup for both renderers
-        self.render_left.setup_robot(config, self.arm)
+        # Setup for both renderers with their respective transforms
+        self.render_left.setup_robot(config_left, self.arm)
         self.render_left.load_background('exports/mult-view-scene/left-transform2.ply')
 
-        self.render_right.setup_robot(config, self.arm)
+        self.render_right.setup_robot(config_right, self.arm)
         self.render_right.load_background('exports/mult-view-scene/right-transform.ply')
 
         # Save original SH for data augmentation
