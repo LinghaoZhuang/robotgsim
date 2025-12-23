@@ -4,6 +4,9 @@ Test Robot Gaussian Model
 
 Simple test to verify that the splat_to_world transformation and FK are working correctly.
 
+Key insight: robot.ply is aligned to Genesis*0.8 (scaled Genesis).
+We test FK in the scaled coordinate system, comparing with scaled Genesis.
+
 Usage:
     python scripts/test_robot_gs.py
 """
@@ -17,7 +20,7 @@ import numpy as np
 import torch
 import open3d as o3d
 from robot_gaussian.robot_gaussian_model import RobotGaussianConfig, RobotGaussianModel
-from robot_gaussian.forward_kinematics import LINK_NAMES
+from robot_gaussian.forward_kinematics import LINK_NAMES, get_transformation_list_scaled
 
 
 def transform_matrix3(translation=(0.5, 0.5, -0.5), rotation=(30, 60, -180), scale=1.0):
@@ -57,9 +60,23 @@ def transform_matrix3(translation=(0.5, 0.5, -0.5), rotation=(30, 60, -180), sca
     return S @ R @ T_translate
 
 
+def get_genesis_points_scaled(arm, link_names, genesis_center, scale_factor=0.8):
+    """Get Genesis mesh vertices scaled by scale_factor around genesis_center."""
+    genesis_points = []
+    for name in link_names:
+        link = arm.get_link(name)
+        verts = link.get_vverts().cpu().numpy()
+        genesis_points.append(verts)
+    genesis_all = np.vstack(genesis_points)
+
+    # Scale around genesis_center
+    genesis_scaled = (genesis_all - genesis_center) * scale_factor + genesis_center
+    return genesis_scaled
+
+
 def main():
     print("=" * 60)
-    print("Testing Robot Gaussian Model")
+    print("Testing Robot Gaussian Model (Scaled FK Approach)")
     print("=" * 60)
 
     # 1. Initialize Genesis
@@ -99,42 +116,39 @@ def main():
         world_to_splat=world_to_splat
     )
     print(f"   Initial joints: {config.initial_joint_states}")
-    print(f"   ICP translation: {config.icp_translation}")
+    print(f"   Genesis scale factor: {config.genesis_scale}")
+
+    # Load genesis_center
+    genesis_center = np.load(config.genesis_center_path)
+    print(f"   Genesis center: {genesis_center}")
 
     # 3. Initialize Robot Gaussian Model
     print("\n[3/5] Initializing Robot Gaussian Model...")
     # CRITICAL: Set arm to initial pose AND step BEFORE creating RobotGaussianModel
-    # Genesis requires scene.step() to actually update positions
     arm.set_dofs_position(config.initial_joint_states)
-    scene.step()  # This step actually moves the arm
+    scene.step()
     robot_model = RobotGaussianModel(config, arm)
-    # No need for extra step - model reads positions immediately
 
     print(f"   Robot Gaussians: {len(robot_model.gaussians.xyz)}")
     print(f"   Segments: {[len(s) for s in robot_model.segmented_list]}")
 
-    # 4. Test static alignment
-    print("\n[4/5] Testing static alignment...")
+    # 4. Test static alignment (compare with SCALED Genesis)
+    print("\n[4/5] Testing static alignment (scaled coordinates)...")
 
-    # Get Genesis link point clouds
-    genesis_points = []
-    for name in LINK_NAMES:
-        link = arm.get_link(name)
-        verts = link.get_vverts().cpu().numpy()
-        genesis_points.append(verts)
-    genesis_all = np.vstack(genesis_points)
+    # Get SCALED Genesis at initial pose
+    genesis_scaled = get_genesis_points_scaled(arm, LINK_NAMES, genesis_center, config.genesis_scale)
 
-    # Get robot Gaussian positions (after splat_to_world transform)
+    # Get robot Gaussian positions (in scaled world coords, NO inverse scaling)
     robot_xyz = robot_model.backup_xyz.cpu().numpy()
 
-    print(f"   Genesis range: X=[{genesis_all[:,0].min():.4f}, {genesis_all[:,0].max():.4f}]")
-    print(f"   Genesis range: Z=[{genesis_all[:,2].min():.4f}, {genesis_all[:,2].max():.4f}]")
+    print(f"   Genesis*0.8 range: X=[{genesis_scaled[:,0].min():.4f}, {genesis_scaled[:,0].max():.4f}]")
+    print(f"   Genesis*0.8 range: Z=[{genesis_scaled[:,2].min():.4f}, {genesis_scaled[:,2].max():.4f}]")
     print(f"   Robot GS range: X=[{robot_xyz[:,0].min():.4f}, {robot_xyz[:,0].max():.4f}]")
     print(f"   Robot GS range: Z=[{robot_xyz[:,2].min():.4f}, {robot_xyz[:,2].max():.4f}]")
 
     # Compute alignment error
     pcd_genesis = o3d.geometry.PointCloud()
-    pcd_genesis.points = o3d.utility.Vector3dVector(genesis_all)
+    pcd_genesis.points = o3d.utility.Vector3dVector(genesis_scaled)
     pcd_robot = o3d.geometry.PointCloud()
     pcd_robot.points = o3d.utility.Vector3dVector(robot_xyz)
 
@@ -150,35 +164,32 @@ def main():
     arm.set_dofs_position(new_joints)
     scene.step()
 
-    # Get Genesis at new pose for comparison
-    genesis_new_points = []
-    for name in LINK_NAMES:
-        link = arm.get_link(name)
-        verts = link.get_vverts().cpu().numpy()
-        genesis_new_points.append(verts)
-    genesis_new_all = np.vstack(genesis_new_points)
+    # Get SCALED Genesis at new pose
+    genesis_new_scaled = get_genesis_points_scaled(arm, LINK_NAMES, genesis_center, config.genesis_scale)
 
-    # Manually apply FK to robot Gaussians (without world_to_splat)
-    from robot_gaussian.forward_kinematics import get_transformation_list
-    transformations = get_transformation_list(arm, robot_model.initial_link_states, LINK_NAMES)
+    # Apply SCALED FK to robot Gaussians
+    transformations = get_transformation_list_scaled(
+        arm, robot_model.initial_link_states, LINK_NAMES,
+        genesis_center, config.genesis_scale
+    )
 
-    # Start from backup (World coords)
+    # Start from backup (scaled world coords)
     robot_xyz_fk = robot_model.backup_xyz.clone()
 
-    # Apply FK transforms per link
-    for joint_idx, (R_rel, T) in enumerate(transformations):
+    # Apply FK transforms per link (in scaled space)
+    for joint_idx, (R_rel, T_scaled) in enumerate(transformations):
         segment = robot_model.segmented_list[joint_idx + 1]  # +1 to skip Base
         if len(segment) > 0:
-            robot_xyz_fk[segment] = (R_rel @ robot_xyz_fk[segment].T).T + T
+            robot_xyz_fk[segment] = (R_rel @ robot_xyz_fk[segment].T).T + T_scaled
 
     robot_xyz_fk_np = robot_xyz_fk.cpu().numpy()
 
-    print(f"   Genesis new pose X range: [{genesis_new_all[:,0].min():.4f}, {genesis_new_all[:,0].max():.4f}]")
+    print(f"   Genesis*0.8 new pose X range: [{genesis_new_scaled[:,0].min():.4f}, {genesis_new_scaled[:,0].max():.4f}]")
     print(f"   Robot FK X range: [{robot_xyz_fk_np[:,0].min():.4f}, {robot_xyz_fk_np[:,0].max():.4f}]")
 
     # Compute alignment error at new pose
     pcd_genesis_new = o3d.geometry.PointCloud()
-    pcd_genesis_new.points = o3d.utility.Vector3dVector(genesis_new_all)
+    pcd_genesis_new.points = o3d.utility.Vector3dVector(genesis_new_scaled)
     pcd_robot_fk = o3d.geometry.PointCloud()
     pcd_robot_fk.points = o3d.utility.Vector3dVector(robot_xyz_fk_np)
 
@@ -190,7 +201,7 @@ def main():
     print("\n" + "=" * 60)
     print("Saving point clouds for visualization...")
 
-    # Save Genesis at initial pose (gray)
+    # Save Genesis*0.8 at initial pose (gray)
     pcd_genesis.paint_uniform_color([0.5, 0.5, 0.5])
     o3d.io.write_point_cloud("data/test_genesis_initial.ply", pcd_genesis)
 
@@ -198,18 +209,18 @@ def main():
     pcd_robot.paint_uniform_color([0.0, 0.8, 0.0])
     o3d.io.write_point_cloud("data/test_robot_initial.ply", pcd_robot)
 
-    # Save Genesis at NEW pose (gray) - for FK comparison
+    # Save Genesis*0.8 at NEW pose (gray)
     pcd_genesis_new.paint_uniform_color([0.5, 0.5, 0.5])
     o3d.io.write_point_cloud("data/test_genesis_new.ply", pcd_genesis_new)
 
-    # Save robot GS after FK (blue) - using robot_xyz_fk_np (World coords)
+    # Save robot GS after FK (blue)
     pcd_robot_fk.paint_uniform_color([0.0, 0.0, 0.8])
     o3d.io.write_point_cloud("data/test_robot_fk.ply", pcd_robot_fk)
 
-    print("   Saved: data/test_genesis_initial.ply (gray) - initial pose")
-    print("   Saved: data/test_robot_initial.ply (green) - initial pose")
-    print("   Saved: data/test_genesis_new.ply (gray) - new pose")
-    print("   Saved: data/test_robot_fk.ply (blue) - FK result")
+    print("   Saved: data/test_genesis_initial.ply (gray) - Genesis*0.8 initial pose")
+    print("   Saved: data/test_robot_initial.ply (green) - robot.ply initial pose")
+    print("   Saved: data/test_genesis_new.ply (gray) - Genesis*0.8 new pose")
+    print("   Saved: data/test_robot_fk.ply (blue) - robot.ply FK result")
     print("\nTo visualize initial alignment:")
     print("   python scripts/view_ply.py data/test_genesis_initial.ply data/test_robot_initial.ply")
     print("\nTo visualize FK result:")

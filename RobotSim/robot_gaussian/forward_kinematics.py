@@ -124,3 +124,59 @@ def get_transformation_list(arm, initial_states, link_names):
         ))
 
     return transformations
+
+
+def get_transformation_list_scaled(arm, initial_states, link_names, genesis_center, scale_factor=0.8):
+    """
+    Compute FK transformations for scaled coordinate system.
+
+    Use this when robot.ply is aligned to Genesis*scale_factor (e.g., 0.8).
+    The transforms are computed for the scaled positions so FK works correctly
+    without needing to inverse-scale robot.ply.
+
+    Args:
+        arm: Genesis arm entity
+        initial_states: Initial link states from get_link_states_genesis
+        link_names: List of link names
+        genesis_center: Center point used for scaling (numpy array, shape (3,))
+        scale_factor: Scale factor applied to Genesis during ICP (default 0.8)
+
+    Returns:
+        List of tuples (R_rel, T_scaled) for each joint
+    """
+    current_states = get_link_states_genesis(arm, link_names)
+    transformations = []
+
+    C = genesis_center  # Center for scaling
+
+    for i in range(1, len(link_names)):  # Start from 1, skip Base
+        # Convert wxyz → xyzw for FK calculation
+        quat_init_xyzw = np.roll(initial_states[i]['quat'], -1)
+        quat_curr_xyzw = np.roll(current_states[i]['quat'], -1)
+
+        # Get positions
+        pos_init = initial_states[i]['pos']
+        pos_curr = current_states[i]['pos']
+
+        # Scale positions to match robot.ply's coordinate system
+        # robot.ply is aligned to Genesis*0.8, so scale Genesis positions by 0.8
+        pos_init_scaled = (pos_init - C) * scale_factor + C
+        pos_curr_scaled = (pos_curr - C) * scale_factor + C
+
+        # Create pose objects with scaled positions
+        pose_init = type('obj', (object,), {
+            'pos': pos_init_scaled,
+            'quat': quat_init_xyzw
+        })
+        pose_curr = type('obj', (object,), {
+            'pos': pos_curr_scaled,
+            'quat': quat_curr_xyzw
+        })
+
+        r_rel, t_scaled = compute_transformation(pose_init, pose_curr)
+        transformations.append((
+            torch.from_numpy(r_rel).cuda().float(),
+            torch.from_numpy(t_scaled).cuda().float()
+        ))
+
+    return transformations
