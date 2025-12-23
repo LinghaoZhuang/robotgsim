@@ -41,6 +41,7 @@ class RobotGaussianConfig:
     """Configuration for Robot Gaussian Model."""
     robot_ply_path: str = 'exports/mult-view-scene/robot.ply'
     labels_path: str = 'data/labels/so100_labels.npy'
+    genesis_center_path: str = 'data/labels/genesis_center.npy'  # Saved from segment_robot.py
     initial_joint_states: list = None
     world_to_splat: np.ndarray = None  # world→COLMAP transformation
 
@@ -123,7 +124,7 @@ class RobotGaussianModel:
 
         Args:
             config: Configuration with transformation parameters
-            arm: Genesis arm entity (needed to compute genesis_center)
+            arm: Genesis arm entity (not used for genesis_center anymore)
         """
         # Get transformation parameters
         R_y_90 = torch.tensor(config.R_y_90, device='cuda', dtype=torch.float32)
@@ -138,15 +139,11 @@ class RobotGaussianModel:
         xyz = self.gaussians.xyz
         xyz_aligned = (R_combined @ xyz.T).T + icp_translation
 
-        # Step 2: Compute genesis_center from current Genesis mesh
-        # (arm should be at initial pose at this point)
-        genesis_points = []
-        for name in LINK_NAMES:
-            link = arm.get_link(name)
-            verts = link.get_vverts().cpu().numpy()
-            genesis_points.append(verts)
-        genesis_all = np.vstack(genesis_points)
-        genesis_center = torch.tensor(genesis_all.mean(axis=0), device='cuda', dtype=torch.float32)
+        # Step 2: Load genesis_center from file (saved by segment_robot.py)
+        # CRITICAL: Must use the EXACT same center as during KNN segmentation
+        # Otherwise the inverse scaling will introduce an offset
+        genesis_center = np.load(config.genesis_center_path)
+        genesis_center = torch.tensor(genesis_center, device='cuda', dtype=torch.float32)
 
         # Step 3: Scale robot.ply to match unscaled Genesis
         # robot.ply was aligned to Genesis*0.8, so scale by 1/0.8 to match Genesis*1.0

@@ -207,6 +207,13 @@ def main():
     print(f"   Shape: {labels.shape}")
     print(f"   Unique labels: {np.unique(labels)}")
 
+    # Save genesis_center for use in robot_gaussian_model.py
+    # This ensures consistent scaling center between segmentation and FK
+    genesis_center_path = 'data/labels/genesis_center.npy'
+    np.save(genesis_center_path, genesis_center)
+    print(f"   Saved genesis_center to: {genesis_center_path}")
+    print(f"   genesis_center: {genesis_center}")
+
     # Print distribution
     print("\n   Gaussian distribution by link:")
     for i, name in enumerate(LINK_NAMES):
