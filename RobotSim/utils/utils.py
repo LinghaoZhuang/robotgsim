@@ -236,6 +236,7 @@ def get_args(benchmark=False, use_rlg_config=False):
     parser.add_argument("--save_dir", default="collected_data", help="")
     parser.add_argument("--reset_cam", type=float, default=0.01, help="")
     parser.add_argument("--single_view", action='store_true', help="")
+    parser.add_argument("--use_robot_gs", action='store_true', help="Pure 3DGS rendering for robot (no overlay)")
     args = parser.parse_args()
     return args
 
