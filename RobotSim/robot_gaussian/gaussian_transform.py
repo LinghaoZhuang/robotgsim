@@ -114,9 +114,9 @@ def transform_means_scaled(gau, segmented_list, transformations_list, world_to_s
         gau: GaussianDataCUDA with attributes (xyz, rot, scale, opacity, sh)
         segmented_list: List of indices for each link (7 elements)
         transformations_list: List of (R_rel, T_scaled) from get_transformation_list_scaled
-        world_to_splat: (4,4) transformation matrix from unscaled world to COLMAP
+        world_to_splat: (4,4) transformation matrix - INVERSE of ICP (scaled World → COLMAP)
         genesis_center: Center point used for scaling (numpy array, shape (3,))
-        genesis_scale: Scale factor (e.g., 0.8)
+        genesis_scale: Scale factor (e.g., 0.8) - NOT USED anymore, kept for API compatibility
 
     Returns:
         Modified gau with updated xyz, rot, scale, and sh
@@ -124,9 +124,6 @@ def transform_means_scaled(gau, segmented_list, transformations_list, world_to_s
     xyz = gau.xyz.clone()  # In scaled world coordinates
     rot = gau.rot.clone()  # wxyz format
     sh = gau.sh.clone()    # (N, 16, 3)
-
-    # Convert genesis_center to tensor
-    C = torch.tensor(genesis_center, device='cuda', dtype=torch.float32)
 
     # ===== Step 1: Apply FK transformations in scaled coordinate system =====
     # Base (index 0) does not transform, start from joint 0
@@ -149,43 +146,29 @@ def transform_means_scaled(gau, segmented_list, transformations_list, world_to_s
         shs_rest = transform_shs(shs_rest, R_rel)
         sh[segment] = torch.cat([shs_dc, shs_rest], dim=1)
 
-    # ===== Step 2: Convert from scaled to unscaled world coordinates =====
-    # robot_scaled = (robot_world - C) * scale + C
-    # Inverse: robot_world = (robot_scaled - C) / scale + C
-    xyz_unscaled = (xyz - C) / genesis_scale + C
-
-    # Scale Gaussian scale parameters (they were in scaled space)
-    scale_unscaled = gau.scale / genesis_scale
-
-    # ===== Step 3: Transform to COLMAP coordinate system =====
-    R_w2s_with_scale = world_to_splat[:3, :3]
+    # ===== Step 2: Transform directly from scaled World to COLMAP =====
+    # world_to_splat is now the EXACT inverse of splat_to_world (ICP)
+    # No need to unscale first - the inverse ICP handles everything
+    R_w2s = world_to_splat[:3, :3]
     T_w2s = world_to_splat[:3, 3]
 
-    # Extract pure rotation and scale factor
-    U, S, Vh = torch.linalg.svd(R_w2s_with_scale)
-    R_w2s_pure = U @ Vh
-    scale_factor = S.prod().pow(1/3)
+    # 2.1 Transform position
+    xyz_colmap = (R_w2s @ xyz.T).T + T_w2s
 
-    # 3.1 Transform position (with scale from world_to_splat)
-    xyz_colmap = (R_w2s_with_scale @ xyz_unscaled.T).T + T_w2s
-
-    # 3.2 Transform Gaussian rotation
+    # 2.2 Transform Gaussian rotation (pure rotation, no scale in inverse ICP)
     rot_mat_all = o3.quaternion_to_matrix(rot)
-    rot_mat_all = R_w2s_pure @ rot_mat_all
+    rot_mat_all = R_w2s @ rot_mat_all
     rot_colmap = o3.matrix_to_quaternion(rot_mat_all)
 
-    # 3.3 Scale Gaussian scale parameters (combine both scales)
-    scale_colmap = scale_unscaled * scale_factor
-
-    # 3.4 Rotate SH coefficients
+    # 2.3 Rotate SH coefficients
     shs_dc_all = sh[:, :1, :]
     shs_rest_all = sh[:, 1:, :]
-    shs_rest_all = transform_shs(shs_rest_all, R_w2s_pure)
+    shs_rest_all = transform_shs(shs_rest_all, R_w2s)
     sh_colmap = torch.cat([shs_dc_all, shs_rest_all], dim=1)
 
-    # ===== Step 4: Update Gaussian data =====
+    # ===== Step 3: Update Gaussian data =====
+    # Note: scale is NOT modified since inverse ICP is pure rotation + translation
     gau.xyz = xyz_colmap
     gau.rot = rot_colmap
-    gau.scale = scale_colmap
     gau.sh = sh_colmap
     return gau

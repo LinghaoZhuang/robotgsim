@@ -97,10 +97,24 @@ class RobotGaussianModel:
         labels = np.load(config.labels_path)
         self.segmented_list = get_segmented_indices(labels, num_links=7)
 
-        # 3. world_to_splat transformation (for final rendering)
-        self.world_to_splat = torch.tensor(
-            config.world_to_splat, device='cuda', dtype=torch.float32
-        )
+        # 3. Compute world_to_splat as EXACT INVERSE of splat_to_world (ICP-based)
+        # This ensures consistent coordinate transformation
+        R_y_90 = torch.tensor(config.R_y_90, device='cuda', dtype=torch.float32)
+        icp_rotation = torch.tensor(config.icp_rotation, device='cuda', dtype=torch.float32)
+        icp_translation = torch.tensor(config.icp_translation, device='cuda', dtype=torch.float32)
+        R_combined = icp_rotation @ R_y_90
+
+        # Inverse: xyz_colmap = R_combined^T @ (xyz_world - icp_translation)
+        R_combined_inv = R_combined.T
+        t_inv = -R_combined_inv @ icp_translation
+
+        self.world_to_splat = torch.eye(4, device='cuda', dtype=torch.float32)
+        self.world_to_splat[:3, :3] = R_combined_inv
+        self.world_to_splat[:3, 3] = t_inv
+
+        # Store R_combined for later use
+        self.R_combined = R_combined
+        self.icp_translation = icp_translation
 
         # 4. Load genesis_center (saved by segment_robot.py)
         # This is used for scaled FK computation
