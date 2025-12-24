@@ -96,6 +96,48 @@ class PickBanana(DataCollector):
         self.end_effector = self.arm.get_link("Moving_Jaw")
         self.default_pos = self.banana.get_dofs_position().cpu().numpy()
         self.load_cam_pose()
+
+    def _init_object_gs(self):
+        """Initialize object Gaussians for pure 3DGS rendering mode."""
+        from robot_gaussian.object_gaussian import ObjectGaussianConfig
+
+        # Load banana ICP parameters
+        banana_icp_path = 'exports/objects/banana_icp_params.json'
+        with open(banana_icp_path, 'r') as f:
+            banana_icp = json.load(f)
+
+        banana_config = ObjectGaussianConfig(
+            ply_path='assets/so100/ply/banana.ply',
+            icp_rotation=banana_icp['icp_rotation'],
+            icp_translation=banana_icp['icp_translation'],
+            initial_pos=[0.32, 0.1, 0.04],  # Genesis initial position
+            initial_quat=[-0.5736, 0.0, 0.0, 0.8192],  # euler (0, 0, 250) in wxyz
+        )
+
+        self.render_left.setup_object('banana', banana_config)
+        self.render_right.setup_object('banana', banana_config)
+
+        # Load box ICP parameters
+        box_icp_path = 'exports/objects/box_icp_params.json'
+        with open(box_icp_path, 'r') as f:
+            box_icp = json.load(f)
+
+        box_config = ObjectGaussianConfig(
+            ply_path='assets/so100/ply/box.ply',
+            icp_rotation=box_icp['icp_rotation'],
+            icp_translation=box_icp['icp_translation'],
+            initial_pos=[0.2, -0.15, -0.003],  # Genesis initial position
+            initial_quat=[0.0, 0.0, 0.7071, 0.7071],  # euler (90, 0, 180) in wxyz
+        )
+
+        self.render_left.setup_object('box', box_config)
+        self.render_right.setup_object('box', box_config)
+
+        # Register objects for pose updates
+        self.gs_objects = {
+            'banana': self.banana,
+            'box': self.box
+        }
         
     def get_data(self, n_steps=37):
         # stay a while 
