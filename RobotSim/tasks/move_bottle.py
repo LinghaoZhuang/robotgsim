@@ -24,9 +24,9 @@ from utils.utils import RGB2SH, SH2RGB, get_args, create_video_from_images
 
 class Movebottle(DataCollector):
     def __init__(self, task='move_bottle', data_augmentation=False, use_gs=True, save_dir='collected_data',
-                 case=0, reset_cam=0.01, single_view=False):
+                 case=0, reset_cam=0.01, single_view=False, use_robot_gs=False):
         super().__init__(task=task, data_augmentation=data_augmentation, use_gs=use_gs, save_dir=save_dir,
-                         case=case, reset_cam=reset_cam,single_view=single_view)
+                         case=case, reset_cam=reset_cam,single_view=single_view, use_robot_gs=use_robot_gs)
         self.reset()
 
     def init_3d_scene(self):
@@ -189,5 +189,6 @@ class Movebottle(DataCollector):
 if __name__ == "__main__":
     args = get_args()
     collector = Movebottle(case=args.start,use_gs=args.use_gs,data_augmentation=args.data_augmentation,
-                           save_dir=args.save_dir,reset_cam=args.reset_cam,single_view=args.single_view)
+                           save_dir=args.save_dir,reset_cam=args.reset_cam,single_view=args.single_view,
+                           use_robot_gs=args.use_robot_gs)
     collector.run(num_steps=args.num_steps)

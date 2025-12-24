@@ -445,6 +445,33 @@ class DataCollector:
         self.original_sh_left_bg = self.render_left.bg_gaussians.sh.clone()
         self.original_sh_right_bg = self.render_right.bg_gaussians.sh.clone()
 
+        # Initialize object GS (subclasses override this)
+        self._init_object_gs()
+
+    def _init_object_gs(self):
+        """
+        Initialize object Gaussians. Subclasses override this method to setup
+        task-specific objects.
+
+        Example implementation in subclass:
+            def _init_object_gs(self):
+                from robot_gaussian.object_gaussian import ObjectGaussianConfig
+
+                banana_config = ObjectGaussianConfig(
+                    ply_path='exports/objects/banana_aligned.ply',
+                    icp_rotation=[[...], [...], [...]],
+                    icp_translation=[...],
+                    initial_pos=[0.32, 0.1, 0.04],
+                    initial_quat=[1, 0, 0, 0],
+                )
+                self.render_left.setup_object('banana', banana_config)
+                self.render_right.setup_object('banana', banana_config)
+
+                # Register for pose updates
+                self.gs_objects = {'banana': self.banana}
+        """
+        self.gs_objects = {}  # Empty by default
+
     def random_gaussians(self,scale_range_min=0.95, scale_range_max=1.05, offset_range_min=-0.005, offset_range_max=0.005,noise_std=0.001):
         if self.single_view:
             original_sh = self.original_sh
@@ -643,6 +670,13 @@ class DataCollector:
         # Update robot Gaussian positions
         self.render_left.update_robot(self.arm)
         self.render_right.update_robot(self.arm)
+
+        # Update object Gaussian positions
+        for name, entity in self.gs_objects.items():
+            pos = entity.get_pos().cpu().numpy()
+            quat = entity.get_quat().cpu().numpy()
+            self.render_left.update_object(name, pos, quat)
+            self.render_right.update_object(name, pos, quat)
 
         # Render dual views
         img_left = self.render_left.draw_pure_gs(self.raster_settings_left)

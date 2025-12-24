@@ -203,6 +203,7 @@ class Renderer(GaussianRenderBase):
         super().__init__()
         self.robot_model = None
         self.bg_gaussians = None  # Background Gaussians
+        self.object_models = {}  # Object Gaussians: {name: ObjectGaussianModel}
 
     def update_gaussian_data(self,file_path='/home/haoyu/code/GSim/exports/scene/scene-transform-wo-camera.ply'):
         gaussians = util_gau.load_ply(file_path)
@@ -229,6 +230,29 @@ class Renderer(GaussianRenderBase):
         gaussians = util_gau.load_ply(bg_path)
         self.bg_gaussians = gaus_cuda_from_cpu(gaussians)
 
+    def setup_object(self, name, config):
+        """
+        Add an object Gaussian model.
+
+        Args:
+            name: Object identifier
+            config: ObjectGaussianConfig
+        """
+        from robot_gaussian.object_gaussian import ObjectGaussianModel
+        self.object_models[name] = ObjectGaussianModel(config)
+
+    def update_object(self, name, pos, quat):
+        """
+        Update object Gaussian positions.
+
+        Args:
+            name: Object identifier
+            pos: Current position [x, y, z]
+            quat: Current quaternion [w, x, y, z]
+        """
+        if name in self.object_models:
+            self.object_models[name].update(pos, quat)
+
     def update_robot(self, arm):
         """
         Update robot Gaussian positions.
@@ -241,7 +265,7 @@ class Renderer(GaussianRenderBase):
 
     def draw_pure_gs(self, raster_settings):
         """
-        Pure Gaussian Splatting rendering (robot + background).
+        Pure Gaussian Splatting rendering (robot + background + objects).
         Bypasses theta/rho parameters, renders combined scene directly.
 
         Args:
@@ -250,15 +274,45 @@ class Renderer(GaussianRenderBase):
         Returns:
             Rendered image tensor (3, H, W)
         """
-        robot_gau = self.robot_model.get_gaussians()
-        bg_gau = self.bg_gaussians
+        # Collect all Gaussians
+        all_xyz = []
+        all_rot = []
+        all_scale = []
+        all_opacity = []
+        all_sh = []
 
-        # Merge Gaussians
-        combined_xyz = torch.cat([robot_gau.xyz, bg_gau.xyz], dim=0)
-        combined_rot = torch.cat([robot_gau.rot, bg_gau.rot], dim=0)
-        combined_scale = torch.cat([robot_gau.scale, bg_gau.scale], dim=0)
-        combined_opacity = torch.cat([robot_gau.opacity, bg_gau.opacity], dim=0)
-        combined_sh = torch.cat([robot_gau.sh, bg_gau.sh], dim=0)
+        # Robot Gaussians
+        if self.robot_model:
+            robot_gau = self.robot_model.get_gaussians()
+            all_xyz.append(robot_gau.xyz)
+            all_rot.append(robot_gau.rot)
+            all_scale.append(robot_gau.scale)
+            all_opacity.append(robot_gau.opacity)
+            all_sh.append(robot_gau.sh)
+
+        # Background Gaussians
+        if self.bg_gaussians:
+            all_xyz.append(self.bg_gaussians.xyz)
+            all_rot.append(self.bg_gaussians.rot)
+            all_scale.append(self.bg_gaussians.scale)
+            all_opacity.append(self.bg_gaussians.opacity)
+            all_sh.append(self.bg_gaussians.sh)
+
+        # Object Gaussians
+        for obj_model in self.object_models.values():
+            obj_gau = obj_model.get_gaussians()
+            all_xyz.append(obj_gau.xyz)
+            all_rot.append(obj_gau.rot)
+            all_scale.append(obj_gau.scale)
+            all_opacity.append(obj_gau.opacity)
+            all_sh.append(obj_gau.sh)
+
+        # Merge all Gaussians
+        combined_xyz = torch.cat(all_xyz, dim=0)
+        combined_rot = torch.cat(all_rot, dim=0)
+        combined_scale = torch.cat(all_scale, dim=0)
+        combined_opacity = torch.cat(all_opacity, dim=0)
+        combined_sh = torch.cat(all_sh, dim=0)
 
         # Render (without theta/rho)
         raster_obj = GaussianRasterizationSettings(**raster_settings)
