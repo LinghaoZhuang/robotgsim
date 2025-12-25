@@ -264,11 +264,36 @@ class ObjectGaussianModel:
         """
         Update Gaussians based on current Genesis pose.
 
-        For now, keep static (don't track movement) to debug position.
+        The key insight is:
+        - aligned_xyz/aligned_rot represent object at ICP reference pose (mesh pose in Genesis)
+        - We need to compute the RELATIVE transform from initial pose to current pose
+        - Then apply that relative transform to aligned Gaussians
+
+        Args:
+            pos: Current Genesis position [x, y, z]
+            quat: Current Genesis quaternion [w, x, y, z]
         """
-        # DEBUG: Keep original position, don't track Genesis movement
-        # This ensures object appears at scanned position in scene
-        pass  # Do nothing - keep aligned_xyz as current_xyz
+        # Convert inputs to tensors
+        current_pos = torch.tensor(pos, device=self.device, dtype=torch.float32)
+        current_quat = torch.tensor(quat, device=self.device, dtype=torch.float32)
+
+        # Compute relative transform: from initial pose to current pose
+        # Translation: delta_t = current_pos - initial_pos
+        delta_t = current_pos - self.initial_pos
+
+        # Rotation: delta_R = current_R @ initial_R^(-1)
+        current_rot_mat = self._quat_to_matrix(current_quat)
+        initial_rot_mat_inv = self.initial_rot_mat.T  # Transpose = inverse for rotation matrix
+        delta_rot_mat = current_rot_mat @ initial_rot_mat_inv
+
+        # Apply relative transform to aligned Gaussians
+        # New position: rotate around initial_pos, then translate
+        centered = self.aligned_xyz - self.initial_pos
+        rotated = (delta_rot_mat @ centered.T).T
+        self.current_xyz = rotated + self.initial_pos + delta_t
+
+        # Apply rotation to Gaussian orientations
+        self.current_rot = self._rotate_quaternions(self.aligned_rot, delta_rot_mat)
 
     def get_gaussians(self) -> GaussianDataCUDA:
         """Return current Gaussian data for rendering."""

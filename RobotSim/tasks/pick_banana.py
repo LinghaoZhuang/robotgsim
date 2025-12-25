@@ -104,16 +104,30 @@ class PickBanana(DataCollector):
         Run `python scripts/icp_object.py --object banana` to generate ICP params.
         """
         from robot_gaussian.object_gaussian import ObjectGaussianConfig
+        from scipy.spatial.transform import Rotation as Rot
+        import numpy as np
+
+        # Convert Genesis euler angles to quaternions (w, x, y, z format)
+        # Banana: euler=(0, 0, 250) degrees
+        banana_euler = [0.0, 0.0, 250.0]
+        banana_rot = Rot.from_euler('xyz', banana_euler, degrees=True)
+        banana_quat_xyzw = banana_rot.as_quat()  # scipy returns [x, y, z, w]
+        banana_quat_wxyz = [banana_quat_xyzw[3], banana_quat_xyzw[0], banana_quat_xyzw[1], banana_quat_xyzw[2]]
+
+        # Box: euler=(90, 0, 180) degrees
+        box_euler = [90.0, 0.0, 180.0]
+        box_rot = Rot.from_euler('xyz', box_euler, degrees=True)
+        box_quat_xyzw = box_rot.as_quat()
+        box_quat_wxyz = [box_quat_xyzw[3], box_quat_xyzw[0], box_quat_xyzw[1], box_quat_xyzw[2]]
 
         # Banana: uses ICP alignment from JSON file
         banana_config = ObjectGaussianConfig(
             ply_path='assets/so100/ply/banana.ply',
             # Load ICP params from file (run scripts/icp_object.py first)
             icp_params_path='exports/objects/banana_icp_params.json',
-            # Genesis initial pose (where banana is placed in scene)
+            # Genesis initial pose (must match icp_object.py mesh config)
             initial_pos=[0.32, 0.1, 0.04],
-            initial_quat=[1, 0, 0, 0],
-            # No supersplat transform - camera uses Genesis coords
+            initial_quat=banana_quat_wxyz,  # Match Genesis euler=(0, 0, 250)
         )
 
         self.render_left.setup_object('banana', banana_config)
@@ -124,8 +138,7 @@ class PickBanana(DataCollector):
             ply_path='assets/so100/ply/box.ply',
             icp_params_path='exports/objects/box_icp_params.json',
             initial_pos=[0.2, -0.15, -0.003],
-            initial_quat=[1, 0, 0, 0],
-            # No supersplat transform - camera uses Genesis coords
+            initial_quat=box_quat_wxyz,  # Match Genesis euler=(90, 0, 180)
         )
 
         self.render_left.setup_object('box', box_config)
