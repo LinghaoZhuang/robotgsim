@@ -191,34 +191,11 @@ class ObjectGaussianModel:
         """
         Update Gaussians based on current Genesis pose.
 
-        Args:
-            pos: Current position [x, y, z] in Genesis coordinate
-            quat: Current quaternion [w, x, y, z]
+        For now, keep static (don't track movement) to debug position.
         """
-        pos = torch.tensor(pos, device=self.device, dtype=torch.float32)
-        quat = torch.tensor(quat, device=self.device, dtype=torch.float32)
-
-        # Compute relative transform from initial to current pose
-        current_rot_mat = self._quat_to_matrix(quat)
-
-        # Relative rotation: R_rel = R_current @ R_initial^T
-        R_rel = current_rot_mat @ self.initial_rot_mat.T
-
-        # Apply rotation around object center (initial_pos), then translate to current pos
-        # 1. Center the aligned points around initial_pos
-        centered = self.aligned_xyz - self.initial_pos
-        # 2. Apply relative rotation
-        rotated = (R_rel @ centered.T).T
-        # 3. Translate to current position (in Genesis coordinate)
-        genesis_xyz = rotated + pos
-
-        # 4. Apply scene transform to convert to rendering coordinate system
-        self.current_xyz = self._apply_scene_transform_points(genesis_xyz)
-
-        # Rotate quaternions (scene rotation also affects quaternions)
-        scene_rot = self.scene_transform[:3, :3]
-        combined_rot = scene_rot @ R_rel
-        self.current_rot = self._rotate_quaternions(self.aligned_rot, combined_rot)
+        # DEBUG: Keep original position, don't track Genesis movement
+        # This ensures object appears at scanned position in scene
+        pass  # Do nothing - keep aligned_xyz as current_xyz
 
     def get_gaussians(self) -> GaussianDataCUDA:
         """Return current Gaussian data for rendering."""

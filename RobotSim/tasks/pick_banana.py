@@ -98,47 +98,35 @@ class PickBanana(DataCollector):
         self.load_cam_pose()
 
     def _init_object_gs(self):
-        """Initialize object Gaussians for pure 3DGS rendering mode."""
+        """Initialize object Gaussians for pure 3DGS rendering mode.
+
+        Objects are cropped from background scene, so they're already in
+        the correct coordinate system. NO ICP needed!
+        """
         from robot_gaussian.object_gaussian import ObjectGaussianConfig
 
-        # Scene transform parameters (must match background PLY transform)
-        scene_translation = [0.34, 0.09, 0.42]
-        scene_rotation_degrees = [-34.29, 11.67, -227.35]
-        scene_scale = 0.81
-
-        # Load banana ICP parameters
-        banana_icp_path = 'exports/objects/banana_icp_params.json'
-        with open(banana_icp_path, 'r') as f:
-            banana_icp = json.load(f)
-
+        # Banana: already in scene coordinate, no ICP
         banana_config = ObjectGaussianConfig(
             ply_path='assets/so100/ply/banana.ply',
-            icp_rotation=banana_icp['icp_rotation'],
-            icp_translation=banana_icp['icp_translation'],
-            initial_pos=[0.32, 0.1, 0.04],  # Genesis initial position
-            initial_quat=[-0.5736, 0.0, 0.0, 0.8192],  # euler (0, 0, 250) in wxyz
-            scene_translation=scene_translation,
-            scene_rotation_degrees=scene_rotation_degrees,
-            scene_scale=scene_scale,
+            # No ICP - identity transform
+            icp_rotation=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+            icp_translation=[0, 0, 0],
+            # Use PLY center as reference point
+            use_ply_center=True,
+            # Initial quaternion: assume no rotation in scanned pose
+            initial_quat=[1, 0, 0, 0],
         )
 
         self.render_left.setup_object('banana', banana_config)
         self.render_right.setup_object('banana', banana_config)
 
-        # Load box ICP parameters
-        box_icp_path = 'exports/objects/box_icp_params.json'
-        with open(box_icp_path, 'r') as f:
-            box_icp = json.load(f)
-
+        # Box: already in scene coordinate, no ICP
         box_config = ObjectGaussianConfig(
             ply_path='assets/so100/ply/box.ply',
-            icp_rotation=box_icp['icp_rotation'],
-            icp_translation=box_icp['icp_translation'],
-            initial_pos=[0.2, -0.15, -0.003],  # Genesis initial position
-            initial_quat=[0.0, 0.0, 0.7071, 0.7071],  # euler (90, 0, 180) in wxyz
-            scene_translation=scene_translation,
-            scene_rotation_degrees=scene_rotation_degrees,
-            scene_scale=scene_scale,
+            icp_rotation=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+            icp_translation=[0, 0, 0],
+            use_ply_center=True,
+            initial_quat=[1, 0, 0, 0],
         )
 
         self.render_left.setup_object('box', box_config)
