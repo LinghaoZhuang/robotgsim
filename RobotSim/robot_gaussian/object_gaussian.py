@@ -38,6 +38,12 @@ class ObjectGaussianConfig:
     # If True, use PLY center as initial_pos (for cropped objects)
     use_ply_center: bool = False
 
+    # Scene transform parameters (to align with background Gaussian)
+    # These should match the transform used for background PLY
+    scene_translation: List[float] = field(default_factory=lambda: [0, 0, 0])
+    scene_rotation_degrees: List[float] = field(default_factory=lambda: [0, 0, 0])
+    scene_scale: float = 1.0
+
 
 class ObjectGaussianModel:
     """
@@ -73,13 +79,23 @@ class ObjectGaussianModel:
         self.aligned_xyz = (self.icp_rotation @ self.original_xyz.T).T + self.icp_translation
         self.aligned_rot = self._rotate_quaternions(self.original_rot, self.icp_rotation)
 
-        # Initial Genesis pose
+        # Build scene transform matrix (to align with background Gaussian)
+        self.scene_transform = self._build_scene_transform(
+            config.scene_translation,
+            config.scene_rotation_degrees,
+            config.scene_scale
+        )
+
+        # Apply scene transform to initial_pos as well
         if config.use_ply_center:
             # Use PLY center as initial position (for cropped objects)
             self.initial_pos = self.aligned_xyz.mean(dim=0)
             print(f"[ObjectGaussian] Using PLY center as initial_pos: {self.initial_pos.cpu().numpy()}")
         else:
             self.initial_pos = torch.tensor(config.initial_pos, device=self.device, dtype=torch.float32)
+
+        # Transform initial_pos to scene coordinate system
+        self.initial_pos_scene = self._apply_scene_transform_point(self.initial_pos)
 
         self.initial_quat = torch.tensor(config.initial_quat, device=self.device, dtype=torch.float32)
 
@@ -89,6 +105,38 @@ class ObjectGaussianModel:
         # Current transformed Gaussians
         self.current_xyz = self.aligned_xyz.clone()
         self.current_rot = self.aligned_rot.clone()
+
+    def _build_scene_transform(self, translation, rotation_degrees, scale):
+        """Build 4x4 scene transform matrix."""
+        import numpy as np
+
+        # Convert to numpy for easier manipulation
+        t = np.array(translation)
+        r_deg = np.array(rotation_degrees)
+
+        # Build rotation matrix from euler angles
+        r = R.from_euler('xyz', r_deg, degrees=True)
+        R_mat = r.as_matrix()
+
+        # Build 4x4 transform: T @ R @ S
+        transform = np.eye(4)
+        transform[:3, :3] = R_mat * scale
+        transform[:3, 3] = t
+
+        return torch.tensor(transform, device=self.device, dtype=torch.float32)
+
+    def _apply_scene_transform_point(self, point):
+        """Apply scene transform to a single 3D point."""
+        point_homo = torch.cat([point, torch.ones(1, device=self.device)])
+        transformed = self.scene_transform @ point_homo
+        return transformed[:3]
+
+    def _apply_scene_transform_points(self, points):
+        """Apply scene transform to multiple 3D points."""
+        N = points.shape[0]
+        points_homo = torch.cat([points, torch.ones(N, 1, device=self.device)], dim=1)
+        transformed = (self.scene_transform @ points_homo.T).T
+        return transformed[:, :3]
 
     def _quat_to_matrix(self, quat: torch.Tensor) -> torch.Tensor:
         """Convert quaternion (w, x, y, z) to rotation matrix."""
@@ -144,7 +192,7 @@ class ObjectGaussianModel:
         Update Gaussians based on current Genesis pose.
 
         Args:
-            pos: Current position [x, y, z]
+            pos: Current position [x, y, z] in Genesis coordinate
             quat: Current quaternion [w, x, y, z]
         """
         pos = torch.tensor(pos, device=self.device, dtype=torch.float32)
@@ -161,11 +209,16 @@ class ObjectGaussianModel:
         centered = self.aligned_xyz - self.initial_pos
         # 2. Apply relative rotation
         rotated = (R_rel @ centered.T).T
-        # 3. Translate to current position
-        self.current_xyz = rotated + pos
+        # 3. Translate to current position (in Genesis coordinate)
+        genesis_xyz = rotated + pos
 
-        # Rotate quaternions
-        self.current_rot = self._rotate_quaternions(self.aligned_rot, R_rel)
+        # 4. Apply scene transform to convert to rendering coordinate system
+        self.current_xyz = self._apply_scene_transform_points(genesis_xyz)
+
+        # Rotate quaternions (scene rotation also affects quaternions)
+        scene_rot = self.scene_transform[:3, :3]
+        combined_rot = scene_rot @ R_rel
+        self.current_rot = self._rotate_quaternions(self.aligned_rot, combined_rot)
 
     def get_gaussians(self) -> GaussianDataCUDA:
         """Return current Gaussian data for rendering."""

@@ -101,6 +101,11 @@ class PickBanana(DataCollector):
         """Initialize object Gaussians for pure 3DGS rendering mode."""
         from robot_gaussian.object_gaussian import ObjectGaussianConfig
 
+        # Scene transform parameters (must match background PLY transform)
+        scene_translation = [0.34, 0.09, 0.42]
+        scene_rotation_degrees = [-34.29, 11.67, -227.35]
+        scene_scale = 0.81
+
         # Load banana ICP parameters
         banana_icp_path = 'exports/objects/banana_icp_params.json'
         with open(banana_icp_path, 'r') as f:
@@ -112,6 +117,9 @@ class PickBanana(DataCollector):
             icp_translation=banana_icp['icp_translation'],
             initial_pos=[0.32, 0.1, 0.04],  # Genesis initial position
             initial_quat=[-0.5736, 0.0, 0.0, 0.8192],  # euler (0, 0, 250) in wxyz
+            scene_translation=scene_translation,
+            scene_rotation_degrees=scene_rotation_degrees,
+            scene_scale=scene_scale,
         )
 
         self.render_left.setup_object('banana', banana_config)
@@ -128,6 +136,9 @@ class PickBanana(DataCollector):
             icp_translation=box_icp['icp_translation'],
             initial_pos=[0.2, -0.15, -0.003],  # Genesis initial position
             initial_quat=[0.0, 0.0, 0.7071, 0.7071],  # euler (90, 0, 180) in wxyz
+            scene_translation=scene_translation,
+            scene_rotation_degrees=scene_rotation_degrees,
+            scene_scale=scene_scale,
         )
 
         self.render_left.setup_object('box', box_config)
