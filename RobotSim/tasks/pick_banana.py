@@ -128,6 +128,8 @@ class PickBanana(DataCollector):
             # Genesis initial pose (must match icp_object.py mesh config)
             initial_pos=[0.32, 0.1, 0.04],
             initial_quat=banana_quat_wxyz,  # Match Genesis euler=(0, 0, 250)
+            # Scale to match Genesis mesh size (adjust if needed)
+            object_scale=0.6,
         )
 
         self.render_left.setup_object('banana', banana_config)
@@ -139,6 +141,8 @@ class PickBanana(DataCollector):
             icp_params_path='exports/objects/box_icp_params.json',
             initial_pos=[0.2, -0.15, -0.003],
             initial_quat=box_quat_wxyz,  # Match Genesis euler=(90, 0, 180)
+            # Scale to match Genesis mesh size (adjust if needed)
+            object_scale=0.6,
         )
 
         self.render_left.setup_object('box', box_config)

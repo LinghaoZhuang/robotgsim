@@ -41,6 +41,10 @@ class ObjectGaussianConfig:
     # If True, use PLY center as initial_pos (for cropped objects)
     use_ply_center: bool = False
 
+    # Object scale factor (to adjust size mismatch between PLY and Genesis mesh)
+    # Values < 1.0 make object smaller, > 1.0 make it larger
+    object_scale: float = 1.0
+
     # Supersplat transform parameters (Genesis → Background PLY coordinate system)
     # These should match the transform used for background PLY in supersplat
     # Set to None to skip supersplat transform
@@ -101,6 +105,16 @@ class ObjectGaussianModel:
         # Apply ICP alignment (identity if cropped from scene)
         self.aligned_xyz = (self.icp_rotation @ self.original_xyz.T).T + self.icp_translation
         self.aligned_rot = self._rotate_quaternions(self.original_rot, self.icp_rotation)
+
+        # Apply object scale (to fix size mismatch between PLY and Genesis mesh)
+        self.object_scale = config.object_scale
+        if self.object_scale != 1.0:
+            # Scale xyz around object center
+            center = self.aligned_xyz.mean(dim=0)
+            self.aligned_xyz = (self.aligned_xyz - center) * self.object_scale + center
+            # Scale Gaussian scale parameters
+            self.scale = self.scale * self.object_scale
+            print(f"[ObjectGaussian] Applied object_scale={self.object_scale}")
 
         # Build supersplat transform matrix (if provided)
         self.supersplat_transform = None
