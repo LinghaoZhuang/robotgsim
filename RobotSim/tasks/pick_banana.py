@@ -100,32 +100,29 @@ class PickBanana(DataCollector):
     def _init_object_gs(self):
         """Initialize object Gaussians for pure 3DGS rendering mode.
 
-        Objects are cropped from background scene, so they're already in
-        the correct coordinate system. NO ICP needed!
+        Objects need ICP alignment to match Genesis mesh coordinates.
+        Run `python scripts/icp_object.py --object banana` to generate ICP params.
         """
         from robot_gaussian.object_gaussian import ObjectGaussianConfig
 
-        # Banana: already in scene coordinate, no ICP
+        # Banana: uses ICP alignment from JSON file
         banana_config = ObjectGaussianConfig(
             ply_path='assets/so100/ply/banana.ply',
-            # No ICP - identity transform
-            icp_rotation=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-            icp_translation=[0, 0, 0],
-            # Use PLY center as reference point
-            use_ply_center=True,
-            # Initial quaternion: assume no rotation in scanned pose
+            # Load ICP params from file (run scripts/icp_object.py first)
+            icp_params_path='exports/objects/banana_icp_params.json',
+            # Genesis initial pose (where banana is placed in scene)
+            initial_pos=[0.32, 0.1, 0.04],
             initial_quat=[1, 0, 0, 0],
         )
 
         self.render_left.setup_object('banana', banana_config)
         self.render_right.setup_object('banana', banana_config)
 
-        # Box: already in scene coordinate, no ICP
+        # Box: uses ICP alignment from JSON file
         box_config = ObjectGaussianConfig(
             ply_path='assets/so100/ply/box.ply',
-            icp_rotation=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-            icp_translation=[0, 0, 0],
-            use_ply_center=True,
+            icp_params_path='exports/objects/box_icp_params.json',
+            initial_pos=[0.2, -0.15, -0.003],
             initial_quat=[1, 0, 0, 0],
         )
 

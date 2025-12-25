@@ -31,6 +31,9 @@ class ObjectGaussianConfig:
     icp_rotation: List[List[float]] = field(default_factory=lambda: [[1, 0, 0], [0, 1, 0], [0, 0, 1]])
     icp_translation: List[float] = field(default_factory=lambda: [0, 0, 0])
 
+    # Path to ICP params JSON file (if set, overrides icp_rotation/icp_translation)
+    icp_params_path: Optional[str] = None
+
     # Genesis initial pose (for computing relative transforms)
     initial_pos: List[float] = field(default_factory=lambda: [0, 0, 0])
     initial_quat: List[float] = field(default_factory=lambda: [1, 0, 0, 0])  # w, x, y, z
@@ -71,9 +74,28 @@ class ObjectGaussianModel:
         # Reshape SH coefficients
         self.sh = self.sh.reshape(len(self.original_xyz), -1, 3).contiguous()
 
+        # Load ICP parameters from JSON if provided
+        icp_rotation = config.icp_rotation
+        icp_translation = config.icp_translation
+
+        if config.icp_params_path:
+            import json
+            from pathlib import Path
+            params_path = Path(config.icp_params_path)
+            if params_path.exists():
+                with open(params_path, 'r') as f:
+                    icp_params = json.load(f)
+                    icp_rotation = icp_params['icp_rotation']
+                    icp_translation = icp_params['icp_translation']
+                    print(f"[ObjectGaussian] Loaded ICP params from {params_path}")
+                    print(f"   Fitness: {icp_params.get('fitness', 'N/A')}, RMSE: {icp_params.get('rmse', 'N/A')}")
+            else:
+                print(f"[ObjectGaussian] WARNING: ICP params file not found: {params_path}")
+                print(f"   Using default ICP parameters (identity)")
+
         # ICP alignment parameters
-        self.icp_rotation = torch.tensor(config.icp_rotation, device=self.device, dtype=torch.float32)
-        self.icp_translation = torch.tensor(config.icp_translation, device=self.device, dtype=torch.float32)
+        self.icp_rotation = torch.tensor(icp_rotation, device=self.device, dtype=torch.float32)
+        self.icp_translation = torch.tensor(icp_translation, device=self.device, dtype=torch.float32)
 
         # Apply ICP alignment (identity if cropped from scene)
         self.aligned_xyz = (self.icp_rotation @ self.original_xyz.T).T + self.icp_translation
