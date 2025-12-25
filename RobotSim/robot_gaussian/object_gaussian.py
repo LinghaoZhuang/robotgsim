@@ -27,12 +27,16 @@ class ObjectGaussianConfig:
     ply_path: str  # Path to object PLY file
 
     # ICP alignment parameters (PLY -> Genesis initial pose)
+    # Set to identity if PLY is already aligned (e.g., cropped from scene)
     icp_rotation: List[List[float]] = field(default_factory=lambda: [[1, 0, 0], [0, 1, 0], [0, 0, 1]])
     icp_translation: List[float] = field(default_factory=lambda: [0, 0, 0])
 
     # Genesis initial pose (for computing relative transforms)
     initial_pos: List[float] = field(default_factory=lambda: [0, 0, 0])
     initial_quat: List[float] = field(default_factory=lambda: [1, 0, 0, 0])  # w, x, y, z
+
+    # If True, use PLY center as initial_pos (for cropped objects)
+    use_ply_center: bool = False
 
 
 class ObjectGaussianModel:
@@ -65,16 +69,22 @@ class ObjectGaussianModel:
         self.icp_rotation = torch.tensor(config.icp_rotation, device=self.device, dtype=torch.float32)
         self.icp_translation = torch.tensor(config.icp_translation, device=self.device, dtype=torch.float32)
 
+        # Apply ICP alignment (identity if cropped from scene)
+        self.aligned_xyz = (self.icp_rotation @ self.original_xyz.T).T + self.icp_translation
+        self.aligned_rot = self._rotate_quaternions(self.original_rot, self.icp_rotation)
+
         # Initial Genesis pose
-        self.initial_pos = torch.tensor(config.initial_pos, device=self.device, dtype=torch.float32)
+        if config.use_ply_center:
+            # Use PLY center as initial position (for cropped objects)
+            self.initial_pos = self.aligned_xyz.mean(dim=0)
+            print(f"[ObjectGaussian] Using PLY center as initial_pos: {self.initial_pos.cpu().numpy()}")
+        else:
+            self.initial_pos = torch.tensor(config.initial_pos, device=self.device, dtype=torch.float32)
+
         self.initial_quat = torch.tensor(config.initial_quat, device=self.device, dtype=torch.float32)
 
         # Compute initial rotation matrix from quaternion (w, x, y, z)
         self.initial_rot_mat = self._quat_to_matrix(self.initial_quat)
-
-        # Apply ICP alignment to get Gaussians at Genesis initial pose
-        self.aligned_xyz = (self.icp_rotation @ self.original_xyz.T).T + self.icp_translation
-        self.aligned_rot = self._rotate_quaternions(self.original_rot, self.icp_rotation)
 
         # Current transformed Gaussians
         self.current_xyz = self.aligned_xyz.clone()
