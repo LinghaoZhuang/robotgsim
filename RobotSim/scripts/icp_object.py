@@ -30,7 +30,7 @@ OBJECT_CONFIGS = {
         'mesh_file': './assets/objects/banana/banana.obj',
         'pos': (0.32, 0.1, 0.04),
         'euler': (0.0, 0.0, 250.0),
-        'scale': 1.0,
+        'scale': 0.95,  # Match Genesis scale
     },
     'toy': {
         'ply_path': 'assets/so100/ply/toy.ply',
@@ -42,9 +42,9 @@ OBJECT_CONFIGS = {
     'box': {
         'ply_path': 'assets/so100/ply/box.ply',
         'mesh_file': './assets/objects/box/box.obj',
-        'pos': (0.2, -0.15, -0.004),
+        'pos': (0.2, -0.15, -0.003),  # Match Genesis pos
         'euler': (90.0, 0.0, 180.0),
-        'scale': 1.0,
+        'scale': 0.95,  # Match Genesis scale
     },
     'water': {
         'ply_path': 'assets/so100/ply/water.ply',
