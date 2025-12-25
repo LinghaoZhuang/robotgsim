@@ -106,12 +106,13 @@ class PickBanana(DataCollector):
         from robot_gaussian.object_gaussian import ObjectGaussianConfig
 
         # Banana: cropped from scene, no ICP needed
-        # ICP rotation/translation = identity (no transform)
+        # initial_quat should match the orientation when scanned
+        # If scanned at Genesis initial pose: euler=(0,0,250) -> quat=[-0.5736, 0, 0, 0.8192]
         banana_config = ObjectGaussianConfig(
             ply_path='assets/so100/ply/banana.ply',
             icp_rotation=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],  # Identity
             icp_translation=[0, 0, 0],  # No translation
-            initial_quat=[1, 0, 0, 0],  # No initial rotation in scene
+            initial_quat=[-0.5736, 0.0, 0.0, 0.8192],  # Genesis initial euler (0,0,250)
             use_ply_center=True,  # Auto-detect center from PLY
         )
 
@@ -119,11 +120,12 @@ class PickBanana(DataCollector):
         self.render_right.setup_object('banana', banana_config)
 
         # Box: cropped from scene, no ICP needed
+        # Genesis initial: euler=(90,0,180) -> quat=[0, 0, 0.7071, 0.7071]
         box_config = ObjectGaussianConfig(
             ply_path='assets/so100/ply/box.ply',
             icp_rotation=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],  # Identity
             icp_translation=[0, 0, 0],  # No translation
-            initial_quat=[1, 0, 0, 0],  # No initial rotation in scene
+            initial_quat=[0.0, 0.0, 0.7071, 0.7071],  # Genesis initial euler (90,0,180)
             use_ply_center=True,  # Auto-detect center from PLY
         )
 
