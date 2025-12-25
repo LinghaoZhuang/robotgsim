@@ -680,11 +680,15 @@ class DataCollector:
             self.render_left.update_object(name, pos, quat)
             self.render_right.update_object(name, pos, quat)
 
-        # Render dual views
+        # Render dual views (GS)
         img_left = self.render_left.draw_pure_gs(self.raster_settings_left)
         img_right = self.render_right.draw_pure_gs(self.raster_settings_right)
 
-        # Convert format and save images
+        # Render Genesis simulation images for comparison
+        rgb_left_sim, _, _, _ = self.cam_left.render(depth=True, rgb=True)
+        rgb_right_sim, _, _, _ = self.cam_right.render(depth=True, rgb=True)
+
+        # Convert GS format and save images
         if img_left.is_cuda:
             img_left = img_left.cpu()
         if img_right.is_cuda:
@@ -693,8 +697,15 @@ class DataCollector:
         img_left_np = (img_left.permute(1, 2, 0).numpy() * 255).clip(0, 255).astype(np.uint8)
         img_right_np = (img_right.permute(1, 2, 0).numpy() * 255).clip(0, 255).astype(np.uint8)
 
+        # Save GS images
         cv2.imwrite(str(self.save_dir / f'frame_{self.step}_left.png'), cv2.cvtColor(img_left_np, cv2.COLOR_RGB2BGR))
         cv2.imwrite(str(self.save_dir / f'frame_{self.step}_right.png'), cv2.cvtColor(img_right_np, cv2.COLOR_RGB2BGR))
+
+        # Save simulation images for comparison
+        rgb_left_sim_bgr = cv2.cvtColor(rgb_left_sim, cv2.COLOR_RGB2BGR)
+        rgb_right_sim_bgr = cv2.cvtColor(rgb_right_sim, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(str(self.save_dir / f'frame_{self.step}_left_sim.png'), rgb_left_sim_bgr)
+        cv2.imwrite(str(self.save_dir / f'frame_{self.step}_right_sim.png'), rgb_right_sim_bgr)
 
         # Save qpos and actions (same as original get_obs_img)
         qpos = self.arm.get_dofs_position().cpu().numpy()
