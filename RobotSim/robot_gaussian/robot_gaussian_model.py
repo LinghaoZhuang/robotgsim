@@ -62,6 +62,13 @@ class RobotGaussianConfig:
     # robot.ply is aligned to Genesis*scale, FK is computed in scaled space
     genesis_scale: float = DEFAULT_GENESIS_SCALE
 
+    # Supersplat transform parameters (Genesis → Background PLY coordinate system)
+    # These should match the transform used for background PLY in supersplat
+    # Set to None to skip supersplat transform (if background is in Genesis coords)
+    supersplat_translation: list = None  # e.g., [0.34, 0.09, 0.42]
+    supersplat_rotation_degrees: list = None  # e.g., [-34.29, 11.67, -227.35]
+    supersplat_scale: float = None  # e.g., 0.81
+
     def __post_init__(self):
         if self.initial_joint_states is None:
             self.initial_joint_states = [0, -3.32, 3.11, 1.18, 0, -0.174]
@@ -135,6 +142,87 @@ class RobotGaussianModel:
         self.backup_rot = self.gaussians.rot.clone()
         self.backup_scale = self.gaussians.scale.clone()
         self.backup_sh = self.gaussians.sh.clone()
+
+        # 9. Build supersplat transform matrix (if parameters provided)
+        self.supersplat_transform = None
+        if config.supersplat_translation is not None:
+            self.supersplat_transform = self._build_supersplat_transform(
+                config.supersplat_translation,
+                config.supersplat_rotation_degrees,
+                config.supersplat_scale
+            )
+            print(f"[RobotGaussian] Supersplat transform enabled")
+            print(f"   Translation: {config.supersplat_translation}")
+            print(f"   Rotation: {config.supersplat_rotation_degrees}")
+            print(f"   Scale: {config.supersplat_scale}")
+
+    def _build_supersplat_transform(self, translation, rotation_degrees, scale):
+        """
+        Build supersplat transform matrix (Genesis → Background PLY coordinate system).
+
+        This matches the transform_matrix3 function used in base_task.py for supersplat alignment.
+        The transformation order is: translate → rotate around translated center → scale around center
+
+        Args:
+            translation: [tx, ty, tz]
+            rotation_degrees: [rx, ry, rz] in degrees
+            scale: scale factor
+
+        Returns:
+            4x4 transformation matrix
+        """
+        from scipy.spatial.transform import Rotation as R
+
+        t = np.array(translation)
+        r_deg = np.array(rotation_degrees)
+        s = scale if scale is not None else 1.0
+
+        # Build rotation matrix
+        rot = R.from_euler('xyz', r_deg, degrees=True)
+        R_mat = rot.as_matrix()
+
+        # Build 4x4 transform: scale and rotate around translation center
+        # This matches supersplat's behavior: T_final = S_center @ R_center @ T_translate
+        center = t
+
+        # Translation matrix
+        T_translate = np.eye(4)
+        T_translate[:3, 3] = t
+
+        # Rotation around center
+        T_neg = np.eye(4)
+        T_neg[:3, 3] = -center
+        T_pos = np.eye(4)
+        T_pos[:3, 3] = center
+
+        # Individual rotation matrices
+        def rot_mat_4x4(axis, angle_deg):
+            angle = np.radians(angle_deg)
+            c, s = np.cos(angle), np.sin(angle)
+            if axis == 'x':
+                return np.array([[1,0,0,0],[0,c,-s,0],[0,s,c,0],[0,0,0,1]])
+            elif axis == 'y':
+                return np.array([[c,0,s,0],[0,1,0,0],[-s,0,c,0],[0,0,0,1]])
+            else:  # z
+                return np.array([[c,-s,0,0],[s,c,0,0],[0,0,1,0],[0,0,0,1]])
+
+        R_x = rot_mat_4x4('x', r_deg[0])
+        R_y = rot_mat_4x4('y', r_deg[1])
+        R_z = rot_mat_4x4('z', r_deg[2])
+
+        # Combined rotation around center
+        R_combined = T_pos @ R_x @ T_neg
+        R_combined = T_pos @ R_y @ T_neg @ R_combined
+        R_combined = T_pos @ R_z @ T_neg @ R_combined
+
+        # Scale around center
+        S = np.diag([s, s, s, 1])
+        S_center = T_pos @ S @ T_neg
+
+        # Final transform
+        T_final = S_center @ R_combined @ T_translate
+
+        return torch.tensor(T_final, device='cuda', dtype=torch.float32)
 
     def _apply_splat_to_world_transform(self, config):
         """
@@ -212,6 +300,52 @@ class RobotGaussianModel:
             self.genesis_center,
             self.config.genesis_scale
         )
+
+        # Apply supersplat transform to align with background PLY
+        if self.supersplat_transform is not None:
+            self._apply_supersplat_transform()
+
+    def _apply_supersplat_transform(self):
+        """
+        Apply supersplat transform to align robot Gaussians with background PLY.
+
+        Background PLY has supersplat transform baked in, so robot needs the same
+        transform to appear in the correct position relative to the background.
+        """
+        from e3nn import o3
+        from .sh_rotation import transform_shs
+
+        T = self.supersplat_transform
+
+        # Extract rotation and translation
+        R_mat = T[:3, :3]
+        t_vec = T[:3, 3]
+
+        # Extract pure rotation (remove scale via SVD)
+        U, S, Vh = torch.linalg.svd(R_mat)
+        R_pure = U @ Vh
+        scale_factor = S.prod().pow(1/3)
+
+        # Transform position
+        xyz = self.gaussians.xyz
+        xyz_transformed = (R_mat @ xyz.T).T + t_vec
+        self.gaussians.xyz = xyz_transformed
+
+        # Transform Gaussian rotation (pure rotation only)
+        rot = self.gaussians.rot
+        rot_mat = o3.quaternion_to_matrix(rot)
+        rot_mat = R_pure @ rot_mat
+        self.gaussians.rot = o3.matrix_to_quaternion(rot_mat)
+
+        # Scale Gaussian scale parameters
+        self.gaussians.scale = self.gaussians.scale * scale_factor
+
+        # Rotate SH coefficients
+        sh = self.gaussians.sh
+        shs_dc = sh[:, :1, :]
+        shs_rest = sh[:, 1:, :]
+        shs_rest = transform_shs(shs_rest, R_pure)
+        self.gaussians.sh = torch.cat([shs_dc, shs_rest], dim=1)
 
     def get_gaussians(self):
         """

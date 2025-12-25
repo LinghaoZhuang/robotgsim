@@ -41,11 +41,12 @@ class ObjectGaussianConfig:
     # If True, use PLY center as initial_pos (for cropped objects)
     use_ply_center: bool = False
 
-    # Scene transform parameters (to align with background Gaussian)
-    # These should match the transform used for background PLY
-    scene_translation: List[float] = field(default_factory=lambda: [0, 0, 0])
-    scene_rotation_degrees: List[float] = field(default_factory=lambda: [0, 0, 0])
-    scene_scale: float = 1.0
+    # Supersplat transform parameters (Genesis → Background PLY coordinate system)
+    # These should match the transform used for background PLY in supersplat
+    # Set to None to skip supersplat transform
+    supersplat_translation: Optional[List[float]] = None
+    supersplat_rotation_degrees: Optional[List[float]] = None
+    supersplat_scale: Optional[float] = None
 
 
 class ObjectGaussianModel:
@@ -101,23 +102,32 @@ class ObjectGaussianModel:
         self.aligned_xyz = (self.icp_rotation @ self.original_xyz.T).T + self.icp_translation
         self.aligned_rot = self._rotate_quaternions(self.original_rot, self.icp_rotation)
 
-        # Build scene transform matrix (to align with background Gaussian)
-        self.scene_transform = self._build_scene_transform(
-            config.scene_translation,
-            config.scene_rotation_degrees,
-            config.scene_scale
-        )
+        # Build supersplat transform matrix (if provided)
+        self.supersplat_transform = None
+        if config.supersplat_translation is not None:
+            self.supersplat_transform = self._build_supersplat_transform(
+                config.supersplat_translation,
+                config.supersplat_rotation_degrees,
+                config.supersplat_scale
+            )
+            print(f"[ObjectGaussian] Supersplat transform enabled")
 
-        # Apply scene transform to initial_pos as well
+            # Apply supersplat transform to aligned Gaussians
+            self.aligned_xyz, self.aligned_rot, self.scale = self._apply_supersplat_to_gaussians(
+                self.aligned_xyz, self.aligned_rot, self.scale
+            )
+
+        # Set initial position
         if config.use_ply_center:
             # Use PLY center as initial position (for cropped objects)
             self.initial_pos = self.aligned_xyz.mean(dim=0)
             print(f"[ObjectGaussian] Using PLY center as initial_pos: {self.initial_pos.cpu().numpy()}")
         else:
             self.initial_pos = torch.tensor(config.initial_pos, device=self.device, dtype=torch.float32)
-
-        # Transform initial_pos to scene coordinate system
-        self.initial_pos_scene = self._apply_scene_transform_point(self.initial_pos)
+            # Apply supersplat transform to initial_pos if enabled
+            if self.supersplat_transform is not None:
+                pos_homo = torch.cat([self.initial_pos, torch.ones(1, device=self.device)])
+                self.initial_pos = (self.supersplat_transform @ pos_homo)[:3]
 
         self.initial_quat = torch.tensor(config.initial_quat, device=self.device, dtype=torch.float32)
 
@@ -128,37 +138,78 @@ class ObjectGaussianModel:
         self.current_xyz = self.aligned_xyz.clone()
         self.current_rot = self.aligned_rot.clone()
 
-    def _build_scene_transform(self, translation, rotation_degrees, scale):
-        """Build 4x4 scene transform matrix."""
+    def _build_supersplat_transform(self, translation, rotation_degrees, scale):
+        """
+        Build supersplat transform matrix (Genesis → Background PLY coordinate system).
+
+        This matches the transform_matrix3 function used in base_task.py for supersplat alignment.
+        """
         import numpy as np
 
-        # Convert to numpy for easier manipulation
         t = np.array(translation)
-        r_deg = np.array(rotation_degrees)
+        r_deg = np.array(rotation_degrees) if rotation_degrees else np.zeros(3)
+        s = scale if scale is not None else 1.0
 
-        # Build rotation matrix from euler angles
-        r = R.from_euler('xyz', r_deg, degrees=True)
-        R_mat = r.as_matrix()
+        center = t
 
-        # Build 4x4 transform: T @ R @ S
-        transform = np.eye(4)
-        transform[:3, :3] = R_mat * scale
-        transform[:3, 3] = t
+        # Translation matrix
+        T_translate = np.eye(4)
+        T_translate[:3, 3] = t
 
-        return torch.tensor(transform, device=self.device, dtype=torch.float32)
+        # Rotation around center
+        T_neg = np.eye(4)
+        T_neg[:3, 3] = -center
+        T_pos = np.eye(4)
+        T_pos[:3, 3] = center
 
-    def _apply_scene_transform_point(self, point):
-        """Apply scene transform to a single 3D point."""
-        point_homo = torch.cat([point, torch.ones(1, device=self.device)])
-        transformed = self.scene_transform @ point_homo
-        return transformed[:3]
+        def rot_mat_4x4(axis, angle_deg):
+            angle = np.radians(angle_deg)
+            c, s_ = np.cos(angle), np.sin(angle)
+            if axis == 'x':
+                return np.array([[1,0,0,0],[0,c,-s_,0],[0,s_,c,0],[0,0,0,1]])
+            elif axis == 'y':
+                return np.array([[c,0,s_,0],[0,1,0,0],[-s_,0,c,0],[0,0,0,1]])
+            else:
+                return np.array([[c,-s_,0,0],[s_,c,0,0],[0,0,1,0],[0,0,0,1]])
 
-    def _apply_scene_transform_points(self, points):
-        """Apply scene transform to multiple 3D points."""
-        N = points.shape[0]
-        points_homo = torch.cat([points, torch.ones(N, 1, device=self.device)], dim=1)
-        transformed = (self.scene_transform @ points_homo.T).T
-        return transformed[:, :3]
+        R_x = rot_mat_4x4('x', r_deg[0])
+        R_y = rot_mat_4x4('y', r_deg[1])
+        R_z = rot_mat_4x4('z', r_deg[2])
+
+        R_combined = T_pos @ R_x @ T_neg
+        R_combined = T_pos @ R_y @ T_neg @ R_combined
+        R_combined = T_pos @ R_z @ T_neg @ R_combined
+
+        S = np.diag([s, s, s, 1])
+        S_center = T_pos @ S @ T_neg
+
+        T_final = S_center @ R_combined @ T_translate
+
+        return torch.tensor(T_final, device=self.device, dtype=torch.float32)
+
+    def _apply_supersplat_to_gaussians(self, xyz, rot, scale):
+        """Apply supersplat transform to Gaussians."""
+        T = self.supersplat_transform
+
+        # Extract rotation and translation
+        R_mat = T[:3, :3]
+        t_vec = T[:3, 3]
+
+        # Extract pure rotation (remove scale via SVD)
+        U, S, Vh = torch.linalg.svd(R_mat)
+        R_pure = U @ Vh
+        scale_factor = S.prod().pow(1/3)
+
+        # Transform position
+        xyz_transformed = (R_mat @ xyz.T).T + t_vec
+
+        # Transform Gaussian rotation
+        rot_transformed = self._rotate_quaternions(rot, R_pure)
+
+        # Scale Gaussian scale parameters
+        scale_transformed = scale * scale_factor
+
+        return xyz_transformed, rot_transformed, scale_transformed
 
     def _quat_to_matrix(self, quat: torch.Tensor) -> torch.Tensor:
         """Convert quaternion (w, x, y, z) to rotation matrix."""

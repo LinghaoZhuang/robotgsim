@@ -422,12 +422,16 @@ class DataCollector:
 
         initial_joint_states = [0, -3.32, 3.11, 1.18, 0, -0.174]
 
-        # Note: world_to_splat is now computed internally from ICP parameters
-        # The left/right camera supersplat_transform is NOT needed for robot
+        # Supersplat transform parameters (must match background PLY transform)
+        # These are from init_mult_view_pose - left camera supersplat parameters
         config = RobotGaussianConfig(
             robot_ply_path='exports/mult-view-scene/robot.ply',
             labels_path='data/labels/so100_labels.npy',
-            initial_joint_states=initial_joint_states
+            initial_joint_states=initial_joint_states,
+            # Supersplat transform to align robot with background PLY
+            supersplat_translation=[0.34, 0.09, 0.42],
+            supersplat_rotation_degrees=[-34.29, 11.67, -227.35],  # -180-47.35
+            supersplat_scale=0.81
         )
 
         # Initialize robot to reference pose and record link states
