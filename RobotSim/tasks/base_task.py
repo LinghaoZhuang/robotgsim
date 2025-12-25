@@ -1043,10 +1043,10 @@ class DataCollector:
                 continue
             else:
                 if self.single_view:
-                    create_video_from_images(self.save_dir, self.save_dir/'video.mp4', lossless=False)
+                    create_video_from_images(self.save_dir, self.save_dir/'video.mp4', lossless=False, delete_after=False)
                 else:
-                    create_video_from_images_multi_view(self.save_dir, self.save_dir/'video_left.mp4', lossless=False,view='left')
-                    create_video_from_images_multi_view(self.save_dir, self.save_dir/'video_right.mp4', lossless=False,view='right')
+                    create_video_from_images_multi_view(self.save_dir, self.save_dir/'video_left.mp4', lossless=False, view='left', delete_after=False)
+                    create_video_from_images_multi_view(self.save_dir, self.save_dir/'video_right.mp4', lossless=False, view='right', delete_after=False)
                 step += 1
                 success += 1
                 all_cases += 1
