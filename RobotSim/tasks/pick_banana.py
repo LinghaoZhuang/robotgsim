@@ -105,11 +105,6 @@ class PickBanana(DataCollector):
         """
         from robot_gaussian.object_gaussian import ObjectGaussianConfig
 
-        # Supersplat transform parameters (must match background PLY transform)
-        supersplat_translation = [0.34, 0.09, 0.42]
-        supersplat_rotation = [-34.29, 11.67, -227.35]
-        supersplat_scale = 0.81
-
         # Banana: uses ICP alignment from JSON file
         banana_config = ObjectGaussianConfig(
             ply_path='assets/so100/ply/banana.ply',
@@ -118,10 +113,7 @@ class PickBanana(DataCollector):
             # Genesis initial pose (where banana is placed in scene)
             initial_pos=[0.32, 0.1, 0.04],
             initial_quat=[1, 0, 0, 0],
-            # Supersplat transform to align with background PLY
-            supersplat_translation=supersplat_translation,
-            supersplat_rotation_degrees=supersplat_rotation,
-            supersplat_scale=supersplat_scale,
+            # No supersplat transform - camera uses Genesis coords
         )
 
         self.render_left.setup_object('banana', banana_config)
@@ -133,10 +125,7 @@ class PickBanana(DataCollector):
             icp_params_path='exports/objects/box_icp_params.json',
             initial_pos=[0.2, -0.15, -0.003],
             initial_quat=[1, 0, 0, 0],
-            # Supersplat transform to align with background PLY
-            supersplat_translation=supersplat_translation,
-            supersplat_rotation_degrees=supersplat_rotation,
-            supersplat_scale=supersplat_scale,
+            # No supersplat transform - camera uses Genesis coords
         )
 
         self.render_left.setup_object('box', box_config)
