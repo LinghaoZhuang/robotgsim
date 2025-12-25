@@ -158,7 +158,7 @@ class DataCollector:
 
     def init_mult_view_pose(self):
         self.raster_settings_left = {
-            'image_height': 2542, 'image_width': 1694, 
+            'image_height': 480, 'image_width': 640, 
             'tanfovx': 0.7548988664410912, 'tanfovy': 0.5661741498308184, 
             'bg': torch.tensor([0., 0., 0.], device='cuda:0'), 
             'scale_modifier': 1.0, 
@@ -273,7 +273,7 @@ class DataCollector:
         cam_pos_right = viewmatrix_right.inverse()[3, :3]
         
         self.raster_settings_right = {
-            'image_height': 2542, 'image_width': 1694, 
+            'image_height': 480, 'image_width': 640, 
             'tanfovx': 0.7548988664410912, 'tanfovy': 0.5661741498308184, 
             'bg': torch.tensor([0., 0., 0.], device='cuda:0'), 
             'scale_modifier': 1.0, 

@@ -146,12 +146,13 @@ class ObjectGaussianModel:
         # Relative rotation: R_rel = R_current @ R_initial^T
         R_rel = current_rot_mat @ self.initial_rot_mat.T
 
-        # Relative translation: t_rel = pos_current - R_rel @ pos_initial
-        t_rel = pos - R_rel @ self.initial_pos
-
-        # Apply relative transform to aligned Gaussians
-        # new_xyz = R_rel @ aligned_xyz + t_rel
-        self.current_xyz = (R_rel @ self.aligned_xyz.T).T + t_rel
+        # Apply rotation around object center (initial_pos), then translate to current pos
+        # 1. Center the aligned points around initial_pos
+        centered = self.aligned_xyz - self.initial_pos
+        # 2. Apply relative rotation
+        rotated = (R_rel @ centered.T).T
+        # 3. Translate to current position
+        self.current_xyz = rotated + pos
 
         # Rotate quaternions
         self.current_rot = self._rotate_quaternions(self.aligned_rot, R_rel)
