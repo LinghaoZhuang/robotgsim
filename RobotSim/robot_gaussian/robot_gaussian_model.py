@@ -37,7 +37,8 @@ DEFAULT_ICP_ROTATION = np.array([
     [0.09228557, 0.99569634, 0.00849548],
     [-0.17559495, 0.00787556, 0.984431]
 ], dtype=np.float32)
-DEFAULT_ICP_TRANSLATION = np.array([0.0021, -0.0206, 0.1048], dtype=np.float32)
+# Updated translation to better align with background (X offset ~0.5)
+DEFAULT_ICP_TRANSLATION = np.array([0.5, 0.1, 0.0], dtype=np.float32)
 
 # Scale factor used during KNN training (Genesis was scaled by this)
 DEFAULT_GENESIS_SCALE = 0.8
