@@ -302,6 +302,11 @@ class RobotGaussianModel:
                 self.genesis_center,
                 self.config.genesis_scale
             )
+        else:
+            # Even without FK, need to unscale from Genesis*0.8 to Genesis*1.0
+            C = torch.tensor(self.genesis_center, device='cuda', dtype=torch.float32)
+            self.gaussians.xyz = (self.gaussians.xyz - C) / self.config.genesis_scale + C
+            self.gaussians.scale = self.gaussians.scale / self.config.genesis_scale
 
         # Apply supersplat transform to align with background PLY
         if self.supersplat_transform is not None:

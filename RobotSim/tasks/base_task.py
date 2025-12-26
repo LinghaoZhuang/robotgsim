@@ -422,14 +422,16 @@ class DataCollector:
 
         initial_joint_states = [0, -3.32, 3.11, 1.18, 0, -0.174]
 
-        # Note: supersplat transform is NOT needed because:
-        # - get_obs_pure_gs uses Genesis camera pose directly
-        # - Background PLY should already be in Genesis coordinate system
+        # Supersplat transform parameters (must match background PLY transform)
+        # Background PLY has supersplat transform baked in, robot needs same transform
         config = RobotGaussianConfig(
             robot_ply_path='exports/mult-view-scene/robot.ply',
             labels_path='data/labels/so100_labels.npy',
             initial_joint_states=initial_joint_states,
-            # No supersplat transform - camera uses Genesis coords
+            # Supersplat transform to align robot with background PLY
+            supersplat_translation=[0.34, 0.09, 0.42],
+            supersplat_rotation_degrees=[-34.29, 11.67, -227.35],
+            supersplat_scale=0.81
         )
 
         # Initialize robot to reference pose and record link states
