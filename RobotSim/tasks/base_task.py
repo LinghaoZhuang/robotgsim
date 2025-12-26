@@ -427,6 +427,7 @@ class DataCollector:
             robot_ply_path='exports/mult-view-scene/robot.ply',
             labels_path='data/labels/so100_labels.npy',
             initial_joint_states=initial_joint_states,
+            robot_scale=0.6,  # Match object scale
         )
 
         # Initialize robot to reference pose and record link states

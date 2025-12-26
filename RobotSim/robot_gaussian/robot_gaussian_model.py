@@ -70,6 +70,9 @@ class RobotGaussianConfig:
     supersplat_rotation_degrees: list = None  # e.g., [-34.29, 11.67, -227.35]
     supersplat_scale: float = None  # e.g., 0.81
 
+    # Robot scale factor (to match object scale if needed)
+    robot_scale: float = 1.0
+
     def __post_init__(self):
         if self.initial_joint_states is None:
             self.initial_joint_states = [0, -3.32, 3.11, 1.18, 0, -0.174]
@@ -135,10 +138,18 @@ class RobotGaussianModel:
         # This converts robot.ply to match Genesis*0.8 (NO inverse scaling)
         self._apply_splat_to_world_transform(config)
 
-        # 7. Save initial link states (at reference pose)
+        # 7. Apply robot_scale if specified (to match object scale)
+        self.robot_scale = config.robot_scale
+        if self.robot_scale != 1.0:
+            center = self.gaussians.xyz.mean(dim=0)
+            self.gaussians.xyz = (self.gaussians.xyz - center) * self.robot_scale + center
+            self.gaussians.scale = self.gaussians.scale * self.robot_scale
+            print(f"[RobotGaussian] Applied robot_scale={self.robot_scale}")
+
+        # 8. Save initial link states (at reference pose)
         self.initial_link_states = get_link_states_genesis(arm, LINK_NAMES)
 
-        # 8. Backup original Gaussian data (in scaled World coordinates)
+        # 9. Backup original Gaussian data (in scaled World coordinates)
         self.backup_xyz = self.gaussians.xyz.clone()
         self.backup_rot = self.gaussians.rot.clone()
         self.backup_scale = self.gaussians.scale.clone()
