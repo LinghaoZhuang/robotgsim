@@ -37,8 +37,8 @@ DEFAULT_ICP_ROTATION = np.array([
     [0.09228557, 0.99569634, 0.00849548],
     [-0.17559495, 0.00787556, 0.984431]
 ], dtype=np.float32)
-# Original ICP translation (from segment_robot.py)
-DEFAULT_ICP_TRANSLATION = np.array([0.0021, -0.0206, 0.1048], dtype=np.float32)
+# Computed to align robot PLY base with Genesis robot base at [0,0,0]
+DEFAULT_ICP_TRANSLATION = np.array([-0.133, -0.021, 0.178], dtype=np.float32)
 
 # Scale factor used during KNN training (Genesis was scaled by this)
 DEFAULT_GENESIS_SCALE = 0.8
