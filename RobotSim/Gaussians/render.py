@@ -253,15 +253,16 @@ class Renderer(GaussianRenderBase):
         if name in self.object_models:
             self.object_models[name].update(pos, quat)
 
-    def update_robot(self, arm):
+    def update_robot(self, arm, skip_fk=False):
         """
         Update robot Gaussian positions.
 
         Args:
             arm: Genesis arm entity
+            skip_fk: If True, skip FK transform (for debugging)
         """
         if self.robot_model:
-            self.robot_model.update(arm)
+            self.robot_model.update(arm, skip_fk=skip_fk)
 
     def draw_pure_gs(self, raster_settings):
         """

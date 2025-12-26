@@ -268,12 +268,13 @@ class RobotGaussianModel:
         # NOTE: We do NOT scale Gaussian scale parameters here
         # because we're staying in the scaled coordinate system
 
-    def update(self, arm):
+    def update(self, arm, skip_fk=False):
         """
         Update Gaussian positions based on current joint states.
 
         Args:
             arm: Genesis arm entity
+            skip_fk: If True, skip FK transform (for debugging base alignment)
         """
         # Restore from backup (scaled world coordinates)
         self.gaussians.xyz = self.backup_xyz.clone()
@@ -281,25 +282,26 @@ class RobotGaussianModel:
         self.gaussians.scale = self.backup_scale.clone()
         self.gaussians.sh = self.backup_sh.clone()
 
-        # Compute FK transformations in SCALED coordinate system
-        # This matches robot.ply which is aligned to Genesis*0.8
-        transformations = get_transformation_list_scaled(
-            arm,
-            self.initial_link_states,
-            LINK_NAMES,
-            self.genesis_center,
-            self.config.genesis_scale
-        )
+        if not skip_fk:
+            # Compute FK transformations in SCALED coordinate system
+            # This matches robot.ply which is aligned to Genesis*0.8
+            transformations = get_transformation_list_scaled(
+                arm,
+                self.initial_link_states,
+                LINK_NAMES,
+                self.genesis_center,
+                self.config.genesis_scale
+            )
 
-        # Transform Gaussians: scaled FK + transform to COLMAP
-        self.gaussians = transform_means_scaled(
-            self.gaussians,
-            self.segmented_list,
-            transformations,
-            self.world_to_splat,
-            self.genesis_center,
-            self.config.genesis_scale
-        )
+            # Transform Gaussians: scaled FK + transform to unscaled Genesis
+            self.gaussians = transform_means_scaled(
+                self.gaussians,
+                self.segmented_list,
+                transformations,
+                self.world_to_splat,
+                self.genesis_center,
+                self.config.genesis_scale
+            )
 
         # Apply supersplat transform to align with background PLY
         if self.supersplat_transform is not None:

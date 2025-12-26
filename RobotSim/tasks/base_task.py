@@ -670,8 +670,9 @@ class DataCollector:
         self.raster_settings_right['projmatrix'] = viewmatrix_right @ self.raster_settings_right['projmatrix_raw']
 
         # Update robot Gaussian positions
-        self.render_left.update_robot(self.arm)
-        self.render_right.update_robot(self.arm)
+        # DEBUG: Set skip_fk=True to test base alignment without FK
+        self.render_left.update_robot(self.arm, skip_fk=True)
+        self.render_right.update_robot(self.arm, skip_fk=True)
 
         # Update object Gaussian positions
         for name, entity in self.gs_objects.items():
