@@ -422,12 +422,16 @@ class DataCollector:
 
         initial_joint_states = [0, -3.32, 3.11, 1.18, 0, -0.174]
 
-        # Note: No supersplat transform - need to debug coordinate alignment first
+        # Supersplat transform parameters (same as background PLY)
         config = RobotGaussianConfig(
             robot_ply_path='exports/mult-view-scene/robot.ply',
             labels_path='data/labels/so100_labels.npy',
             initial_joint_states=initial_joint_states,
-            robot_scale=0.8,  # Match object scale
+            robot_scale=0.7,
+            # Apply same supersplat transform as background
+            supersplat_translation=[0.34, 0.09, 0.42],
+            supersplat_rotation_degrees=[-34.29, 11.67, -227.35],
+            supersplat_scale=0.81,
         )
 
         # Initialize robot to reference pose and record link states
